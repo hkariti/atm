@@ -1,0 +1,17 @@
+q1:
+
+cmp r0, #13
+bhi label
+
+explanation: the original program jumbed to "label" if r0 < 0 or r0 > 13. if r0 < 0, when treated as an unsigned number it's also higher than 13 (because left bit is 1), so we can just compare to 13 unsigned.
+
+q2:
+
+jmp (r0)+:
+addr(R/W): 1000(R)  2000(R)
+
+bis @#1560, @1560
+addr(R/W): 1000(R) 1002(R) 1560(R) 1004(R) 1560(R) 1560(W)
+
+add -(pc), 2(pc)
+addr(R/W): 1000(R) 1000(R) (1002 + encoding?!)(R) (1002+encoding)(W)
