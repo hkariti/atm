@@ -1,0 +1,51 @@
+getNextStartingPos:
+    jsr pc, getCurrentBoardItem
+    cmp r0, #'L 
+    beq gNSPLadder
+    cmp r0, #'S
+    bne mainAfterGNSP
+gNSPSnake:
+    cmp curY, #1
+    beq gNSPErrorSnake
+    dec curY
+    br mainAfterGNSP
+gNSPLadder:
+    cmp curY, nRows
+    beq gNSPErrorLadder
+    inc curY
+    br mainAfterGNSP
+gNSPErrorSnake:
+    mov #'F, Output
+    mov #0, Score
+    halt
+gNSPErrorLadder:
+    mov #'F, Output 
+    mov #1, Score
+    halt
+
+movePlayer:
+    cmp r1, #0
+    br mainAfterMP
+    mov curX, r0
+    asr r0
+    bcs mPRight
+mPLeft:
+    cmP curX, #1
+    beq mPUp
+    dec curX
+    sob r1, movePlayer
+mPRight:
+    cmP curX, nCols
+    beq mPUp
+    inc curX
+    sob r1, movePlayer
+mPUp:
+    cmP curY, nRows
+    beq mPError
+    inc curY
+    sob r1, movePlayer
+mPError:
+    mov #'F, Output
+    mov #2, Score
+    halt
+
