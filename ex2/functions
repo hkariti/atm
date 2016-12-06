@@ -1,0 +1,15 @@
+functions:
+
+getBoardItem
+
+movePlayer
+
+getNextStartingPos
+
+testFinishPosition
+
+main
+
+globals:
+
+currentX, currentY
