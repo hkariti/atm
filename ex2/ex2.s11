@@ -1,9 +1,9 @@
 . = torg + 1000
 
 main:   
-        mov pc, sp
+        mov pc, sp              ; init the stack and all global variables
         tst -(sp)
-        mov #1, currentX        ; we start at position [1,1]
+        mov #1, currentX        ; we start at position [1,1] (see below for current position explanation)
         mov #1, currentY        
         clr numMoves
         clr Score
