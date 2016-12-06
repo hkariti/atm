@@ -7,11 +7,14 @@ explanation: the original program jumbed to "label" if r0 < 0 or r0 > 13. if r0 
 
 q2:
 
+mov @1000(r1), 376(r1):
+addr(R/W): 1000(R) 1002(R) 2000(R) 1376(R) 1004(R) 1376(W)
+
 jmp (r0)+:
 addr(R/W): 1000(R)  2000(R)
 
 bis @#1560, @1560
-addr(R/W): 1000(R) 1002(R) 1560(R) 1004(R) 1560(R) 1560(W)
+addr(R/W): 1000(R) 1002(R) 1560(R) 1004(R) 1560(R) 776(R) 776(W)
 
-add -(pc), 2(pc)
-addr(R/W): 1000(R) 1000(R) (1002 + 063767)(R) (1002+063767)(W)
+movb -(pc), 2(pc)
+addr(R/W): 1000(R) 1000(R) 1000(R) (115771)(W)
