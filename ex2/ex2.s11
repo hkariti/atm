@@ -1,0 +1,19 @@
+. = torg + 1000
+
+main:   
+        clr currentX
+        clr currentY
+        clr numMoves
+        clr Score
+        
+        mov #moves, r0
+mainLoop:
+        movb (r0)+, r1
+        cmp r1, #'@
+        bne FinishMoves
+
+
+
+
+        jmp mainLoop
+FinishMoves:
