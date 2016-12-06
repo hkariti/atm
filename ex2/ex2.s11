@@ -17,3 +17,32 @@ mainLoop:
 
         jmp mainLoop
 FinishMoves:
+
+getBoardItem:
+    mov nCols, r0
+    mul curY, r0
+    add curX, r0
+    mov #Board(r0), r0
+    rts pc
+
+getNextStartingPos:
+    mov nRows, r0
+    sub curY, r0
+    asr r0
+    bcs gNSPLeft
+gNSPRight:
+    cmp curX, nCols
+    bne gNSPRightNormal
+    dec curY
+    rts pc
+gNSPRightNormal:
+    inc curX
+    rts pc
+gNSPLeft:
+    tst curX
+    bne gNSPLeftNormal
+    dec curY
+    rts pc
+gNSPRightNormal:
+    dec curX
+    rts pc
