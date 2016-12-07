@@ -8,7 +8,7 @@ main:
         clr numMoves
         clr Score
         
-        mov #Moves, r5          ; r5 holds a pointer to Moves array, doesn't changed through all program
+        mov #Moves, r5          ; r5 holds a pointer to Moves array, doesn't change through all program
 
 mainLoopStart:                  ; The main loop which iterates through all Moves and execute them
         movb (r5)+, r1          ; r1 holds current Move value (how many steps to forward)
@@ -26,7 +26,7 @@ movePlayer:                     ; a loop which forwards the player the same amou
         asr r0
         bcs moveRight           ; check if current row is even
                                 ; if it's even we move the player left
-                                ; and if un-even we move it to the right
+                                ; and if odd we move it to the right
 moveLeft:
         cmp currentX, #1        ; check if we are at the first column
         beq moveUp              ; then we need to move it up
@@ -81,7 +81,7 @@ doneMove:                       ; the player finished executing the move, and no
 
 finishedAllMoves:               ; we got here when the player finished executing all moves
                                 ; check if the current position is the last position,
-                                ; if so - the player didn't accomplish the game ): raise exception
+                                ; if not - the player didn't accomplish the game ): raise exception
         cmp currentY, nRows
         bne errorFinishedAtWrongPlace
         cmp currentX, nCols
