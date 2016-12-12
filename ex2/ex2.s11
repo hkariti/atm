@@ -48,7 +48,14 @@ errorPastLimit:                 ; raise error - we already passed the finish lin
         halt
 
 getNextStartingPosition:        ; check where the player is at and act accordingly
-        jsr pc, getCurrentBoardItem     ; r0 will hold the current board item value
+getCurrentBoardItem:            ; fetches into r0 the current board item at [currentX, currentY]
+        mov nRows, r0     
+        sub currentY, r0        ; r0 now holds [nRows - currentY]
+        mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
+        add currentX, r1        
+        dec r1                  ; r1 now holds the board index to the current position
+        movb Board(r1), r0      ; r0 now holds the board value at r1 index
+checkCurrentBoardItem:
         cmp r0, #'L             ; if the player is on a ladder
         beq onLadder            
         cmp r0, #'S             ; if the player is on a snake
@@ -96,23 +103,6 @@ errorFinishedAtWrongPlace:      ; raise error - the player didn't finish at the 
         mov #3, Score
         halt
 
-
-; This function fetches the current board item at [currentX, currentY]
-; The value is returned in r0
-; Uses PC as register link
-getCurrentBoardItem:
-        mov r1, -(sp)           ; push r1 to the stack as we are going to use it
-
-        mov nRows, r0     
-        sub currentY, r0        ; r0 now holds [nRows - currentY]
-        mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
-        add currentX, r1        
-        dec r1                  ; r1 now holds the board index to the current position
-        movb Board(r1), r0      ; r0 now holds the board value at r1 index
-
-
-        mov (sp)+, r1           ; pop r1 back from the stack
-        rts pc
 
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
