@@ -106,8 +106,17 @@ finishedAllMoves:               ; we got here when the player finished
                                 ; check if the current position is 
                                 ; the last position, if not - the player didn't 
                                 ; accomplish the game ): raise exception
-        cmp currentY, nRows
+        cmp currentY, nRows     ; check we finished at top row
         bne errorFinishedAtWrongPlace
+        mov currentY, r0
+        asr r0
+        bcs mostRightColFinishCheck     ; check if current row is even
+mostLeftColFinishCheck:         ; If we are at even row, 
+                                ; we finish at the most right square
+        cmp currentX, #1        
+        bne errorFinishedAtWrongPlace
+        jmp finishSuccess
+mostRightColFinishCheck:        ; else - we finish at the most left square
         cmp currentX, nCols
         bne errorFinishedAtWrongPlace
         
