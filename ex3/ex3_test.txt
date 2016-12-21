@@ -1,0 +1,11 @@
+nCols:		.word 	5
+nRows:		.word 	3
+numMoves:	.word 	4
+
+Board:	.byte 	 2, 3, 'S, ‘L, 0
+		.byte 	 5, 'L, 6, 'S, 6
+		.byte 	 1, 'L, ‘S, 1, 'L
+
+MovesShort: .blkw 10.
+
+MovesScore: .blkw 10.
