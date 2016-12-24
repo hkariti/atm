@@ -1,26 +1,129 @@
 . = torg + 1000
 
-main:   
+main:
         mov pc, sp              ; init the stack and all global variables
         tst -(sp)
-        mov #1, currentX        ; we start at position [1,1] (see below for current position explanation)
-        mov #1, currentY        
-        clr numMoves
-        clr Score
-        
-        mov #Moves, r5          ; r5 holds a pointer to Moves array, doesn't change through all program
+        jsr pc, checkBoard
+        halt
+        mov Moves, r4
+        jsr pc, checkSol
+        halt
 
-mainLoopStart:                  ; The main loop which iterates through all Moves and execute them
-        movb (r5)+, r1          ; r1 holds current Move value (how many steps to forward)
+Moves:  .byte 4, 5, 4, '@
+
+
+; Params: r4 - moves array pointer
+; Return: -1 if failed or Score if success, how to return!???????
+checkSol:
+        mov r2, -(sp)
+        mov r3, -(sp)
+        mov r4, -(sp)
+        jsr pc, solveGame
+        cmp r2, #'S
+        bne chkSolReturnFail
+        mov r3, r0
+        jmp chkSolEpilogue
+chkSolReturnFail:
+        mov #-1, r0
+chkSolEpilogue:
+        mov (sp)+, r4
+        mov (sp)+, r3
+        mov (sp)+, r2
+        rts pc
+
+
+; Return: r4 - 0 if board valid, 1 if invalid
+checkBoard:
+        mov r1, -(sp)
+        mov r2, -(sp)
+        mov #0, r1              ; r1 - currentX
+        mov #1, r2              ; r2 - currentY
+chkBrdEmpty:
+        cmp #0, nCols
+        bne chkBrdLoop
+        cmp #0, nRows
+        beq chkBrdSuccess
+chkBrdLoop:
+        cmp r1, nCols
+        beq chkBrdLastCol
+        inc r1
+        jmp chkBrdValidCurrentItem
+chkBrdLastCol:
+        cmp r2, nRows
+        bge chkBrdSuccess
+        inc r2
+        mov #1, r1
+chkBrdValidCurrentItem:
+        mov r1, -(sp)
+        mov r2, -(sp)
+        jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2] values
+        add #4, sp
+        cmp r0, #'L
+        beq chkBrdLddrToSnake
+        cmp r0, #'S
+        beq chkBrdSnakeAtLastPos
+        cmp r0, #0
+        blt chkBrdFailure
+        cmp r0, #50
+        bgt chkBrdFailure
+        jmp chkBrdLoop
+chkBrdLddrToSnake:
+        cmp r2, nRows
+        beq chkBrdLoop
+        mov r1, -(sp)
+        mov r2, -(sp)
+        inc (sp)        ; inc currentY sending to check
+        jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2+1] values
+        add #4, sp
+        cmp r0, #'S
+        beq chkBrdFailure
+        jmp chkBrdLoop
+chkBrdSnakeAtLastPos:
+        mov r1, -(sp)
+        mov r2, -(sp)
+        jsr pc, isAtLastPosition
+        add #4, sp
+        cmp r0, 0
+        beq chkBrdFailure
+        jmp chkBrdLoop
+chkBrdSuccess:
+        mov #0, r4
+        jmp chkBrdEpilogue
+chkBrdFailure:
+        mov #1, r4
+chkBrdEpilogue:
+        mov (sp)+, r2
+        mov (sp)+, r1
+        rts pc
+
+
+
+; Params: 
+; r4 - pointer to Moves array, changed during run
+; 
+; Return:
+; r2 - Output
+; r3 - Score
+solveGame:   
+        mov #1, currentX        ; we start at position [1,1] (see below for 
+                                ; current position explanation)
+        mov #1, currentY        
+        clr r3
+        
+mainLoopStart:                  ; The main loop which iterates through 
+                                ; all Moves and execute them
+        movb (r4)+, r1          ; r1 holds current Move value 
+                                ; (how many steps to forward)
         cmp r1, #'@             ; if we got to the end of Moves array
         beq finishedAllMoves    
-        inc numMoves
 
-movePlayer:                     ; a loop which forwards the player the same amount of steps
+movePlayer:                     ; a loop which forwards the player 
+                                ; the same amount of steps
                                 ; as pointed in Moves array
         cmp r1, #0              ; if we finished forwarding the player
         beq getNextStartingPos
-        dec r1                  ; r1 holds how many steps left to forward, so it gets decreased by one
+        dec r1                  ; r1 holds how many steps left to forward, 
+                                ; so it gets decreased by one
                                 ; each time we move it one step 
         mov currentY, r0
         asr r0
@@ -39,22 +142,21 @@ moveRight:
         jmp movePlayer
 moveUp:
         cmp currentY, nRows     ; check if we are already at the last row
-        beq errorPastLimit      ; if so - we exceeded the finish position and raise error
+        beq errorPastLimit      ; if so - we exceeded the finish position 
+                                ; and raise error
         inc currentY            ; if not - just move it step upwords
         jmp movePlayer
 errorPastLimit:                 ; raise error - we already passed the finish line
-        mov #'F, Output         
-        mov #2, Score
-        halt
+        mov #'F, r2         
+        mov #2, r3
+        rts pc
+getNextStartingPosition:        ; check where the player is at 
+                                ; and act accordingly
 
-getNextStartingPosition:        ; check where the player is at and act accordingly
-getCurrentBoardItem:            ; fetches into r0 the current board item at [currentX, currentY]
-        mov nRows, r0     
-        sub currentY, r0        ; r0 now holds [nRows - currentY]
-        mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
-        add currentX, r1        
-        dec r1                  ; r1 now holds the board index to the current position
-        movb Board(r1), r0      ; r0 now holds the board value at r1 index
+        mov currentX, -(sp)
+        mov currentY, -(sp)
+        jsr pc, getCurrentBoardItem
+        add #4, sp
 checkCurrentBoardItem:
         cmp r0, #'L             ; if the player is on a ladder
         beq onLadder            
@@ -62,52 +164,124 @@ checkCurrentBoardItem:
         bne doneMove
 onSnake:
         cmp currentY, #1        ; check if the player is on the first row
-        beq errorSnakeAtBottom  ; if so - we cannot go further down, raise exception
+        beq errorSnakeAtBottom  ; if so - we cannot go further down, 
+                                ; raise exception
         dec currentY            ; if not - decrease current row value
-        br getNextStartingPosition      ; check again where the player is at and act accordingly
+        br getNextStartingPosition      ; check again where the player 
+                                        ; is at and act accordingly
 onLadder:
         cmp currentY, nRows     ; check if the player is on the last row
         beq errorLadderAtTop    ; if so - we cannot go further up, raise exception
         inc currentY            ; if not - increase current row value
-        br getNextStartingPosition       ; check again where the player is at and act accordingly
+        br getNextStartingPosition      ; check again where the player is at 
+                                        ; and act accordingly
 errorSnakeAtBottom:             ; raise error - player got a snake on first row
-        mov #'F, Output
-        mov #0, Score
-        halt
+        mov #'F, r2
+        mov #0, r3
+        rts pc
 errorLadderAtTop:               ; raise error - player got a ladder on top floor
-        mov #'F, Output 
-        mov #1, Score
-        halt
+        mov #'F, r2 
+        mov #1, r3
+        rts pc
 
-doneMove:                       ; the player finished executing the move, and now he is at 
-                                ; a numbered square (not ladder nor snake).
+doneMove:                       ; the player finished executing the move, 
+                                ; and now he is at a numbered square 
+                                ; (not ladder nor snake).
                                 ; r0 holds the current square value
-        add r0, Score           ; add the current number to score
+        add r0, r2           ; add the current number to score
         jmp mainLoopStart       ; fetch another move and execute it!
 
 
-finishedAllMoves:               ; we got here when the player finished executing all moves
-                                ; check if the current position is the last position,
-                                ; if not - the player didn't accomplish the game ): raise exception
-        cmp currentY, nRows
-        bne errorFinishedAtWrongPlace
-        cmp currentX, nCols
+finishedAllMoves:               ; we got here when the player finished 
+                                ; executing all moves
+                                ; check if the current position is 
+                                ; the last position, if not - the player didn't 
+                                ; accomplish the game ): raise exception
+        mov currentX, -(sp)
+        mov currentY, -(sp)
+        jsr pc, isAtLastPosition
+        add #4, sp
+        cmp r0, 0
         bne errorFinishedAtWrongPlace
         
-finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! return success!
-        mov #'S, Output
-        halt
+finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! 
+                                ; return success!
+        mov #'S, r3
+        rts pc
 
-errorFinishedAtWrongPlace:      ; raise error - the player didn't finish at the last square
-        mov #'F, Output
-        mov #3, Score
-        halt
-
+errorFinishedAtWrongPlace:      ; raise error - the player didn't finish 
+                                ; at the last square
+        mov #'F, r2
+        mov #3, r3
+        rts pc
 
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
-; both values ranges from 1 to nCols/nRows, while the first position the player begins
+; both values ranges from 1 to nCols/nRows, 
+; while the first position the player begins
 ; at is [1,1] and the last ending position is [nCols, nRows]
 currentX: .word 0
 currentY: .word 1
 
+
+
+
+; fetches into r0 the current board item at [currentX, currentY]
+; currentX & currentY are passed in the stack: currentY 2(sp), currentX 4(sp)
+getCurrentBoardItem:            
+        mov r1, -(sp)
+
+        mov nRows, r0     
+        sub 4(sp), r0        ; r0 now holds [nRows - currentY]
+        mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
+        add 6(sp), r1        
+        dec r1                  ; r1 now holds the board index to the current position
+        movb Board(r1), r0      ; r0 now holds the board value at r1 index
+
+        mov (sp)+, r1
+        rts pc
+
+
+
+; check if the current position is the last positio
+; currentX & currentY are passed in the stack: currentY 2(sp), currentX 4(sp)
+; return 0 if true or 1 else at r0
+isAtLastPosition:
+halt
+        mov 2(sp), r0
+        cmp 2(sp), nRows     ; check we finished at top row
+        bne notLastPosition
+        mov 2(sp), r0
+        asr r0
+        bcs mostRightColCheck     ; check if current row is even
+mostLeftColCheck:         ; If we are at even row, 
+                                ; we finish at the most right square
+        cmp 4(sp), #1        
+        bne notLastPosition
+        jmp finishSuccess
+mostRightColCheck:        ; else - we finish at the most left square
+        cmp 4(sp), nCols
+        beq atLastPosition
+notLastPosition:
+        mov #1, r0
+        rts pc
+atLastPosition:
+        mov #0, r0
+        rts pc
+
+
+
+
+
+nCols:          .word   5
+nRows:          .word   3
+numMoves:       .word   4
+
+Board:
+                .byte   2, 3, 'S, 'L, 'S
+                .byte   5, 'L, 6, 'S, 6
+                .byte   1, 'L, 'S, 1, 'L
+.even
+MovesShort: .blkw 10.
+
+MovesScore: .blkw 10.
