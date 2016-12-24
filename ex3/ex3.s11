@@ -5,31 +5,11 @@ main:
         tst -(sp)
         jsr pc, checkBoard
         halt
-        mov Moves, r4
+        mov #MovesArray, r4
         jsr pc, checkSol
         halt
 
-Moves:  .byte 4, 5, 4, '@
-
-
-; Params: r4 - moves array pointer
-; Return: -1 if failed or Score if success, how to return!???????
-checkSol:
-        mov r2, -(sp)
-        mov r3, -(sp)
-        mov r4, -(sp)
-        jsr pc, solveGame
-        cmp r2, #'S
-        bne chkSolReturnFail
-        mov r3, r0
-        jmp chkSolEpilogue
-chkSolReturnFail:
-        mov #-1, r0
-chkSolEpilogue:
-        mov (sp)+, r4
-        mov (sp)+, r3
-        mov (sp)+, r2
-        rts pc
+MovesArray:  .byte 4, 5, 3, '@
 
 
 ; Return: r4 - 0 if board valid, 1 if invalid
@@ -97,6 +77,24 @@ chkBrdEpilogue:
         rts pc
 
 
+; Params: r4 - moves array pointer
+; Return: -1 if failed or Score if success, how to return!???????
+checkSol:
+        mov r2, -(sp)
+        mov r3, -(sp)
+        mov r4, -(sp)
+        jsr pc, solveGame
+        cmp r2, #'S
+        bne chkSolReturnFail
+        mov r3, r0
+        jmp chkSolEpilogue
+chkSolReturnFail:
+        mov #-1, r0
+chkSolEpilogue:
+        mov (sp)+, r4
+        mov (sp)+, r3
+        mov (sp)+, r2
+        rts pc
 
 ; Params: 
 ; r4 - pointer to Moves array, changed during run
@@ -188,7 +186,7 @@ doneMove:                       ; the player finished executing the move,
                                 ; and now he is at a numbered square 
                                 ; (not ladder nor snake).
                                 ; r0 holds the current square value
-        add r0, r2           ; add the current number to score
+        add r0, r3              ; add the current number to score
         jmp mainLoopStart       ; fetch another move and execute it!
 
 
@@ -206,7 +204,7 @@ finishedAllMoves:               ; we got here when the player finished
         
 finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! 
                                 ; return success!
-        mov #'S, r3
+        mov #'S, r2
         rts pc
 
 errorFinishedAtWrongPlace:      ; raise error - the player didn't finish 
@@ -247,7 +245,6 @@ getCurrentBoardItem:
 ; currentX & currentY are passed in the stack: currentY 2(sp), currentX 4(sp)
 ; return 0 if true or 1 else at r0
 isAtLastPosition:
-halt
         mov 2(sp), r0
         cmp 2(sp), nRows     ; check we finished at top row
         bne notLastPosition
@@ -272,13 +269,12 @@ atLastPosition:
 
 
 
-
 nCols:          .word   5
 nRows:          .word   3
 numMoves:       .word   4
 
 Board:
-                .byte   2, 3, 'S, 'L, 'S
+                .byte   2, 3, 'S, 'L, 0
                 .byte   5, 'L, 6, 'S, 6
                 .byte   1, 'L, 'S, 1, 'L
 .even
