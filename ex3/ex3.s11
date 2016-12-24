@@ -3,13 +3,155 @@
 main:
         mov pc, sp              ; init the stack and all global variables
         tst -(sp)
+        mov #-1, MovesScore
+        mov #-1, MovesShort
+
         jsr pc, checkBoard
-        halt
-        mov #MovesArray, r4
-        jsr pc, checkSol
+        cmp r4, #0
+        bne mainReturn
+        mov #MovesScore, -(sp)
+        mov numMoves, -(sp)
+        jsr pc, findScore
+mainReturn:
         halt
 
-MovesArray:  .byte 4, 5, 3, '@
+findScore:
+        mov r0, -(sp)  
+        mov r1, -(sp)
+        mov r2, -(sp)
+        mov r4, -(sp)
+
+        mov 12(sp), r0           ; r0 holds numMoves
+        mov 14(sp), r2           ; r2 holds pointer to movesScore
+        sub #2, sp
+        mov sp, r1              ; r1 holds max_score
+        clr (r1)
+        mov r0, r4
+        asr r4
+        bcc allocateCacheMovesArray
+        inc r4        
+allocateCacheMovesArray:
+        asl r4
+        sub r4, sp                                              ;;;;;; need to check uneven move array byte size
+        mov #'@, -(sp)
+        mov sp, r4              ; r4 holds cache_move_array
+        mov r0, -(sp)
+        jsr pc, fndScoreRecursion
+        add r4, sp
+        add #6, sp
+
+        mov (sp)+, r4
+        mov (sp)+, r2
+        mov (sp)+, r1
+        mov (sp)+, r0
+        rts pc
+
+
+; Params:
+; r1 - source move array
+; r3 - dest move array
+copyMovesArray:
+        mov r0, -(sp)
+        mov r3, -(sp)
+        mov r4, -(sp)
+        clr r0
+cpyMovesLoop:
+        movb (r4), r0
+        movb (r4)+, (r3)+
+        cmp r0, #'@
+        bne cpyMovesLoop
+        mov (sp)+, r4
+        mov (sp)+, r3
+        mov (sp)+, r0
+        rts pc
+
+
+; Params:
+; r4 - moves array to add moves to, doesnt changed during runtime
+; r0 - move number to add
+changeLastMove:
+        mov r4, -(sp)
+        mov r1, -(sp)
+chgLstMovLoop:
+        movb (r4)+, r1
+        cmp r1, #'@
+        bne chgLstMovLoop
+        sub #2, r4
+        movb r0, (r4)
+        mov (sp)+, r1
+        mov (sp)+, r4
+        rts pc        
+
+
+; r1 - max_score, r2 - max_score_moves_array, r4 - current_move_array
+fndScoreRecursion:
+        mov r5, -(sp)
+        mov 4(sp), r5   ; r5 contains numMoves
+        mov r3, -(sp)
+        mov r0, -(sp)
+        sub #4, sp
+        mov r1, (sp)    ; (sp) contains max_score pointer
+        mov r2, 2(sp)   ; 2(sp) contains max_score_moves_array
+
+        cmp r5, #0
+        blt fndScrEpilogue
+
+        jsr pc, solveGame       ; r3 contains game Score, r2 contains game Outpu
+        cmp r2, #'S              ; check if solveGame Succeded
+        beq slvGameSuccess
+        cmp r3, #3              ; if failed not becaused haven't reached the end
+        bne fndScrEpilogue
+
+        mov r4, r0  
+        mov #-1, r3      
+fndScrGetMovesArraySize:
+        movb (r0)+, r1
+        inc r3                  ; r3 holds Moves array size
+        cmp r1, #'@
+        bne fndScrGetMovesArraySize
+fndScrExtendMovesArray:
+        movb #'@, (r0)
+        movb #1, -(r0)
+
+        mov #1, r0
+        dec r5
+        mov (sp), r1
+        mov 2(sp), r2
+fndScrLoop:
+        cmp r0, #6
+        bgt fndScrShortenMovesArray
+        jsr pc, changeLastMove
+        mov r5, -(sp)
+        jsr pc, fndScoreRecursion
+        mov (sp)+, r5
+        inc r0
+        jmp fndScrLoop
+
+fndScrShortenMovesArray:
+        cmp r3, #0              ; check if movesArray's length is ze
+        beq fndScrEpilogue
+        mov r4, r0
+        add r3, r0
+        movb #'@, (r0)
+        jmp fndScrEpilogue
+
+slvGameSuccess:
+        cmp r3, @(sp)            ; check if current score is higher than max_score
+        blt fndScrEpilogue
+        mov r3, @(sp)            ; update max_score
+        mov 2(sp), r3
+        jsr pc, copyMovesArray
+        jmp fndScrEpilogue
+
+fndScrEpilogue:
+        mov (sp), r1            ; (sp) contains max_score
+        mov 2(sp), r2           ; 2(sp) contains max_score_moves_array
+        add #4, sp
+        mov (sp)+, r0
+        mov (sp)+, r3
+        mov (sp)+, r5
+        rts pc
+
 
 
 ; Return: r4 - 0 if board valid, 1 if invalid
@@ -97,12 +239,17 @@ chkSolEpilogue:
         rts pc
 
 ; Params: 
-; r4 - pointer to Moves array, changed during run
+; r4 - pointer to Moves array, doesnt changed during run
 ; 
 ; Return:
 ; r2 - Output
 ; r3 - Score
 solveGame:   
+        mov r0, -(sp)
+        mov r1, -(sp)
+        mov r4, -(sp)
+
+
         mov #1, currentX        ; we start at position [1,1] (see below for 
                                 ; current position explanation)
         mov #1, currentY        
@@ -147,7 +294,7 @@ moveUp:
 errorPastLimit:                 ; raise error - we already passed the finish line
         mov #'F, r2         
         mov #2, r3
-        rts pc
+        jmp slvGameEpilogue
 getNextStartingPosition:        ; check where the player is at 
                                 ; and act accordingly
 
@@ -176,11 +323,11 @@ onLadder:
 errorSnakeAtBottom:             ; raise error - player got a snake on first row
         mov #'F, r2
         mov #0, r3
-        rts pc
+        jmp slvGameEpilogue
 errorLadderAtTop:               ; raise error - player got a ladder on top floor
         mov #'F, r2 
         mov #1, r3
-        rts pc
+        jmp slvGameEpilogue
 
 doneMove:                       ; the player finished executing the move, 
                                 ; and now he is at a numbered square 
@@ -205,12 +352,18 @@ finishedAllMoves:               ; we got here when the player finished
 finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! 
                                 ; return success!
         mov #'S, r2
-        rts pc
+        jmp slvGameEpilogue
 
 errorFinishedAtWrongPlace:      ; raise error - the player didn't finish 
                                 ; at the last square
         mov #'F, r2
         mov #3, r3
+        jmp slvGameEpilogue
+
+slvGameEpilogue:
+        mov (sp)+, r4
+        mov (sp)+, r1
+        mov (sp)+, r0
         rts pc
 
 ; currentX and currentY are used to describe the current player position.
