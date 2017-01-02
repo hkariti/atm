@@ -13,7 +13,7 @@ main:
         mov numMoves, -(sp)
         jsr pc, findScore
         add #4, sp
-        mov $MovesShort, -(sp)
+        mov #MovesShort, -(sp)
         mov numMoves, -(sp)
         jsr pc, findShortest
         add #4, sp
@@ -168,7 +168,7 @@ findShortest:
     mov r4, -(sp)
     mov r5, -(sp)
     mov 12(sp), r5              ; r5 holds the max number of moves
-    beq findShortestEpilogue    ; don't do anything if max num of moves is zero
+    beq fsEpilogue    ; don't do anything if max num of moves is zero
     mov 14(sp), r1              ; r1 holds a pointer to the moves array
     clr r2                      ; r2 hols the length of the current series
     mov r1, r3                  ; r3 holds the end of the of current series
@@ -178,12 +178,12 @@ fsLoopNumMoves:                 ; loop over series lengths
     mov #'@, (r3)               ; mark the end of the current series of moves
  fsLoopMoves:                   ; loop over all moves in the current length
     mov r2, r4                  ; checkSol expects the array address in r4
-    jsr checkSol, pc            ; check our series of moves
+    jsr pc, checkSol            ; check our series of moves
     cmp r0, #-1
-    bne findShortestEpilogue    ; If we found a valid move sequence, end
+    bne fsEpilogue    ; If we found a valid move sequence, end
     mov r1, 6(pc)               ; arg1 for nextMoves in the first word inline
     mov r2, 2(pc)               ; arg2 for nextMoves in the second word inline
-    jsr nextMoves, r5           
+    jsr r5, nextMoves           
  argSize:    .word 0            ; placeholder for arg1 to nextMoves
  argPointer:  .word 0           ; placeholder for arg2 to nextMoves
     tst r4
@@ -193,7 +193,7 @@ fsLoopNumMoves:                 ; loop over series lengths
 
 fsFailure:
     mov #-1, (r1)               ; no successful move, put -1 in the moves array
-findShortestEpilogue:
+fsEpilogue:
     mov (sp)+, r5
     mov (sp)+, r4
     mov (sp)+, r3
@@ -214,9 +214,9 @@ nextMoves:
     mov r3, -(sp)
     mov (r5)+, r0               ; r0 contains a pointer to the moves array
     mov (r5)+, r1               ; r1 contains the length of the moves array
-    beq nextMovesEpilogue       ; don't do anything if the array is empty
+    beq nmEpilogue              ; don't do anything if the array is empty
     add r1, r0                  ; go to the end of the array
-nextMovesInc:
+nmInc:
     clr r2                      ; r2:r3 contain the one array element,
                                 ; extended to 32 bit so we could use div
     movb -(r0), r3              ; fetch current element.
@@ -224,11 +224,11 @@ nextMovesInc:
     div #7, r2                  ; make sure r3 is 6 and below
     movb r3, (r0)               ; store value after increment
     tst r2                      
-    beq nextMovesEpilogue       ; return if the value after increment hasn't
+    beq nmEpilogue              ; return if the value after increment hasn't
                                 ; reached 7 (i.e. quotient is 0)
     inc (r0)                    ; set element to 1
-    sob r1, nextMovesInc        ; go and increment next digit
-nextMovesEpilogue:
+    sob r1, nmInc               ; go and increment next digit
+nmEpilogue:
     mov r2, r4                  ; r4 holds the return value. will be 1 if the
                                 ; last increment overflowed
     mov (sp)+, r3
