@@ -9,13 +9,13 @@ main:
         jsr pc, checkBoard
         cmp r4, #0
         bne mainReturn
-        mov #MovesScore, -(sp)
-        mov numMoves, -(sp)
-        jsr pc, findScore
-        add #4, sp
         mov #MovesShort, -(sp)
         mov numMoves, -(sp)
         jsr pc, findShortest
+        add #4, sp
+        mov #MovesScore, -(sp)
+        mov numMoves, -(sp)
+        jsr pc, findScore
         add #4, sp
 mainReturn:
         halt
@@ -171,17 +171,18 @@ findShortest:
     mov r3, -(sp)
     mov r4, -(sp)
     mov r5, -(sp)
-    mov 12(sp), r5              ; r5 holds the max number of moves
+    mov 16(sp), r5              ; r5 holds the max number of moves
     beq fsEpilogue    ; don't do anything if max num of moves is zero
-    mov 14(sp), r1              ; r1 holds a pointer to the moves array
+    mov 20(sp), r1              ; r1 holds a pointer to the moves array
     clr r2                      ; r2 hols the length of the current series
     mov r1, r3                  ; r3 holds the end of the of current series
 fsLoopNumMoves:                 ; loop over series lengths
+    movb #1, (r3)               ; init the next location in the moves array
     inc r2
     inc r3
-    mov #'@, (r3)               ; mark the end of the current series of moves
+    movb #'@, (r3)               ; mark the end of the current series of moves
  fsLoopMoves:                   ; loop over all moves in the current length
-    mov r2, r4                  ; checkSol expects the array address in r4
+    mov r1, r4                  ; checkSol expects the array address in r4
     tst -(sp)
     jsr pc, checkSol            ; check our series of moves
     mov (sp)+, r0
@@ -232,7 +233,7 @@ nmInc:
     tst r2                      
     beq nmEpilogue              ; return if the value after increment hasn't
                                 ; reached 7 (i.e. quotient is 0)
-    inc (r0)                    ; set element to 1
+    movb #1, (r0)               ; set element to 1
     sob r1, nmInc               ; go and increment next digit
 nmEpilogue:
     mov r2, r4                  ; r4 holds the return value. will be 1 if the
