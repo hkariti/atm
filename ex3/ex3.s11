@@ -23,6 +23,7 @@ main:
 mainReturn:
         halt
 
+
 ; Link register: pc
 ; Arguments: 2(sp) - max number of moves
 ;            4(sp) - address of moves array to put sequence of moves in
@@ -99,6 +100,7 @@ chgLstMovLoop:
         mov (sp)+, r4           ; restore non-volatile r0
         rts pc        
 
+
 ; Link register: pc
 ; Arguments: 2(sp) - remaining_moves
 ;            r1 - max_score
@@ -173,6 +175,7 @@ fndScrEpilogue:
         mov (sp)+, r5           ; restore non-volatile r5
         rts pc
 
+
 ; Link register: pc
 ; Arguments: 2(sp) - max number of moves
 ;            4(sp) - address of moves array to put sequence of moves in
@@ -221,6 +224,7 @@ fsEpilogue:
     mov (sp)+, r0
     rts pc
     
+
 ; Link register: r5
 ; Arguments:    (r5) - address of moves array
 ;               (r5+2) - size of moves array 
@@ -344,6 +348,7 @@ chkSolEpilogue:
         mov (sp)+, r3           ; restore non-volatile r3
         mov (sp)+, r2           ; restore non-volatile r2
         rts pc
+
 
 ; Link register: pc
 ; Params:       r4 - pointer to Moves array, doesnt changed during run
@@ -525,5 +530,6 @@ notLastPosition:
 atLastPosition:
         mov #0, r0
         rts pc
+
 
 
