@@ -9,14 +9,17 @@ main:
         jsr pc, checkBoard
         cmp r4, #0
         bne mainReturn
+
         mov #MovesShort, -(sp)
         mov numMoves, -(sp)
         jsr pc, findShortest
         add #4, sp
+
         mov #MovesScore, -(sp)
         mov numMoves, -(sp)
         jsr pc, findScore
         add #4, sp
+
 mainReturn:
         halt
 
@@ -42,11 +45,14 @@ allocateCacheMovesArray:
         asl r4
         sub r4, sp              ; allocate enough room at the stack
         mov #'@, -(sp)          ; put '@ as first move
-        mov sp, r4              ; r4 holds pointer to cache_move_array
-        mov r0, -(sp)           ; r0 contains numMoves (remaining_moves at recursion function)
+        mov r4, -(sp)           ; store current stack pointer
+        mov sp, r4              
+        add #2, r4              ; r4 now holds pointer to cache_move_array
+        mov r0, -(sp)           ; r0 holds numMoves (remaining_moves at recursion function)
         jsr pc, fndScoreRecursion
-        add r4, sp              ; deallocate cache_moves_array
-        add #6, sp              ; deallocate local vars
+        add #2, sp              ; deallocate local vars
+        add (sp)+, sp           ; deallocate cache_moves_array
+        add #4, sp              ; deallocate local vars
 
         mov (sp)+, r4           ; restore non-volatile register r4
         mov (sp)+, r2           ; restore non-volatile register r2
@@ -498,7 +504,7 @@ mostLeftColCheck:         ; If we are at even row,
                                 ; we finish at the most right square
         cmp 4(sp), #1        
         bne notLastPosition
-        jmp finishSuccess
+        jmp atLastPosition
 mostRightColCheck:        ; else - we finish at the most left square
         cmp 4(sp), nCols
         beq atLastPosition
@@ -510,17 +516,23 @@ atLastPosition:
         rts pc
 
 
-.=torg + 5000
 
-nCols:          .word   5
-nRows:          .word   3
-numMoves:       .word   4
+.=torg + 5000                                   
 
-Board:
-                .byte   2, 3, 'S, 'L, 0
-                .byte   5, 'L, 6, 'S, 6
-                .byte   1, 'L, 'S, 1, 'L
+nCols:          .word   1
+nRows:          .word   6
+numMoves:       .word   5
+
+Board:          .byte    2
+                .byte    2
+                .byte    2
+                .byte    2
+                .byte    2
+                .byte    2
 .even
-MovesShort: .blkw 10.
 
+MovesShort: .blkw 10.
 MovesScore: .blkw 10.
+
+; MovesShort = 5,'@
+; MovesScore = 1,1,1,1,1,'@
