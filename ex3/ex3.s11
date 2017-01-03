@@ -21,34 +21,37 @@ mainReturn:
         halt
 
 findScore:
-        mov r0, -(sp)  
-        mov r1, -(sp)
-        mov r2, -(sp)
-        mov r4, -(sp)
+        mov r0, -(sp)           ; save non-volatile register r0
+        mov r1, -(sp)           ; save non-volatile register r1
+        mov r2, -(sp)           ; save non-volatile register r2
+        mov r4, -(sp)           ; save non-volatile register r4
 
-        mov 12(sp), r0           ; r0 holds numMoves
-        mov 14(sp), r2           ; r2 holds pointer to movesScore
-        sub #2, sp
-        mov sp, r1              ; r1 holds max_score
-        clr (r1)
-        mov r0, r4
-        asr r4
+        mov 14(sp), r2          ; r2 now holds pointer to movesScore
+        sub #2, sp              ; allocate memory max_score
+        mov sp, r1              ; r1 holds pointer to max_score
+        clr (r1)                ; reset max_score to 0
+
+        mov 14(sp), r0          ; r0 now holds numMoves
+        mov r0, r4              ; we need to allocate memory for the cached current_moves_array,
+                                ; the memory size will be the same as numMoves however sp must be at even address,
+                                ; so we will round up the size so it will be even number, r4 will contained rounded up numMoves
+        asr r4          
         bcc allocateCacheMovesArray
-        inc r4        
+        inc r4                  ; if numMoves is odd, increment it by one
 allocateCacheMovesArray:
         asl r4
-        sub r4, sp                                              ;;;;;; need to check uneven move array byte size
-        mov #'@, -(sp)
-        mov sp, r4              ; r4 holds cache_move_array
-        mov r0, -(sp)
+        sub r4, sp              ; allocate enough room at the stack
+        mov #'@, -(sp)          ; put '@ as first move
+        mov sp, r4              ; r4 holds pointer to cache_move_array
+        mov r0, -(sp)           ; r0 contains numMoves (remaining_moves at recursion function)
         jsr pc, fndScoreRecursion
-        add r4, sp
-        add #6, sp
+        add r4, sp              ; deallocate cache_moves_array
+        add #6, sp              ; deallocate local vars
 
-        mov (sp)+, r4
-        mov (sp)+, r2
-        mov (sp)+, r1
-        mov (sp)+, r0
+        mov (sp)+, r4           ; restore non-volatile register r4
+        mov (sp)+, r2           ; restore non-volatile register r2
+        mov (sp)+, r1           ; restore non-volatile register r1
+        mov (sp)+, r0           ; restore non-volatile register r0
         rts pc
 
 
@@ -87,74 +90,75 @@ chgLstMovLoop:
         mov (sp)+, r4
         rts pc        
 
-
+; arg1 - remaining_moves
 ; r1 - max_score, r2 - max_score_moves_array, r4 - current_move_array
 fndScoreRecursion:
-        mov r5, -(sp)
-        mov 4(sp), r5   ; r5 contains numMoves
-        mov r3, -(sp)
-        mov r0, -(sp)
-        sub #4, sp
-        mov r1, (sp)    ; (sp) contains max_score pointer
-        mov r2, 2(sp)   ; 2(sp) contains max_score_moves_array
+        mov r5, -(sp)           ; r5 is non-volatile register for this function, save it's value
+        mov 4(sp), r5           ; r5 will contains remaining_moves
+        mov r3, -(sp)           ; r3 is non-volatile register for this function, save it's value
+        mov r0, -(sp)           ; r0 is non-volatile register for this function, save it's value
+        sub #4, sp              ; allocate memory for local vars
+        mov r1, (sp)            ; (sp) local var contains max_score pointer
+        mov r2, 2(sp)           ; 2(sp) local var contains max_score_moves_array
 
-        cmp r5, #0
-        blt fndScrEpilogue
+        cmp r5, #0              ; recursion stop condition - check if remaining_moves is 0
+        blt fndScrEpilogue      ; return from function
 
-        jsr pc, solveGame       ; r3 contains game Score, r2 contains game Outpu
-        cmp r2, #'S              ; check if solveGame Succeded
-        beq slvGameSuccess
+        jsr pc, solveGame       ; try to solve game, when finished r3 contains game Score, r2 contains game Output
+        cmp r2, #'S             ; check if solveGame Succeeded
+        beq slvGameSuccess      ; if succeeded, no point at continue more moves since it will pass the end
         cmp r3, #3              ; if failed not becaused haven't reached the end
-        bne fndScrEpilogue
+        bne fndScrEpilogue      ; no point at continue more moves since it will always fail
 
-        mov r4, r0  
-        mov #-1, r3      
-fndScrGetMovesArraySize:
-        movb (r0)+, r1
-        inc r3                  ; r3 holds Moves array size
-        cmp r1, #'@
+        mov r4, r0              ; r0 now contains current_move_array
+        mov #-1, r3             ; r3 will contain current_moves size, now resets to -1 
+fndScrGetMovesArraySize:        ; this loop finds the current_moves size and save it to r3
+        movb (r0)+, r1          ; r1 contains current move
+        inc r3                  ; increment r3 (holds current_moves size)
+        cmp r1, #'@             ; iterate while current move is not '@
         bne fndScrGetMovesArraySize
-fndScrExtendMovesArray:
-        movb #'@, (r0)
-        movb #1, -(r0)
+fndScrExtendMovesArray:         ; fndScrExtendMovesArray extending the current_moves array by one move 
+        movb #'@, (r0)          ; after fndScrGetMovesArraySize finished, r0 points to the end of the current_moves array
+        movb #1, -(r0)          ; move #1 where '@ was previously located
 
-        mov #1, r0
-        dec r5
-        mov (sp), r1
-        mov 2(sp), r2
+        mov #1, r0              ; fndScrLoop calls fndScoreRecursion 6 times, each time with different last move
+                                ; r0 contains the last_move value
+        dec r5                  ; decrease remaining_moves by 1
+        mov (sp), r1            ; move max_score back to r1
+        mov 2(sp), r2           ; move max_score_moves_array back to r2
 fndScrLoop:
-        cmp r0, #6
+        cmp r0, #6              ; while last_move <= 6
         bgt fndScrShortenMovesArray
-        jsr pc, changeLastMove
-        mov r5, -(sp)
-        jsr pc, fndScoreRecursion
-        mov (sp)+, r5
-        inc r0
+        jsr pc, changeLastMove  ; call changeLastMove which will change the last move according to the arg passed at r0
+        mov r5, -(sp)           ; push remaining_moves as arg1 to fndScoreRecursion 
+        jsr pc, fndScoreRecursion       ; call the recursion
+        mov (sp)+, r5           ; pop back remaining_moves
+        inc r0                  ; increase last_move value
         jmp fndScrLoop
 
-fndScrShortenMovesArray:
-        cmp r3, #0              ; check if movesArray's length is ze
-        beq fndScrEpilogue
-        mov r4, r0
-        add r3, r0
-        movb #'@, (r0)
-        jmp fndScrEpilogue
+fndScrShortenMovesArray:        ; after we called all the current recursion brances, we need to shorten back by one the current_moves array by 
+        cmp r3, #0              ; check if movesArray's length is zero
+        beq fndScrEpilogue      
+        mov r4, r0              ; move current_move array to r0
+        add r3, r0              ; add current_move_array_size to r0, so it will point to the last move
+        movb #'@, (r0)          ; write '@ instead of the last move
+        jmp fndScrEpilogue      ; jump to function's epilogue
 
 slvGameSuccess:
-        cmp r3, @(sp)            ; check if current score is higher than max_score
-        blt fndScrEpilogue
-        mov r3, @(sp)            ; update max_score
-        mov 2(sp), r3
-        jsr pc, copyMovesArray
+        cmp r3, @(sp)           ; check if current score is higher than max_score
+        blt fndScrEpilogue      ; if not - jump to function's epilogue
+        mov r3, @(sp)           ; update max_score value
+        mov 2(sp), r3           ; move max_score array to r3 (destination array arg for copyMovesArray)
+        jsr pc, copyMovesArray  ; copy current_moves_array to max_moves_array
         jmp fndScrEpilogue
 
 fndScrEpilogue:
-        mov (sp), r1            ; (sp) contains max_score
-        mov 2(sp), r2           ; 2(sp) contains max_score_moves_array
-        add #4, sp
-        mov (sp)+, r0
-        mov (sp)+, r3
-        mov (sp)+, r5
+        mov (sp), r1            ; move max_score back to r1
+        mov 2(sp), r2           ; move max_score_moves_array back to r2
+        add #4, sp              ; deallocate local vars
+        mov (sp)+, r0           ; restore non-volatile r0
+        mov (sp)+, r3           ; restore non-volatile r3
+        mov (sp)+, r5           ; restore non-volatile r5
         rts pc
 
 ; Link register: pc
@@ -178,11 +182,13 @@ fsLoopNumMoves:                 ; loop over series lengths
     mov #'@, (r3)               ; mark the end of the current series of moves
  fsLoopMoves:                   ; loop over all moves in the current length
     mov r2, r4                  ; checkSol expects the array address in r4
+    tst -(sp)
     jsr pc, checkSol            ; check our series of moves
+    mov (sp)+, r0
     cmp r0, #-1
     bne fsEpilogue    ; If we found a valid move sequence, end
-    mov r1, 6(pc)               ; arg1 for nextMoves in the first word inline
-    mov r2, 2(pc)               ; arg2 for nextMoves in the second word inline
+    mov r1, argSize              ; arg1 for nextMoves in the first word inline
+    mov r2, argPointer               ; arg2 for nextMoves in the second word inline
     jsr r5, nextMoves           
  argSize:    .word 0            ; placeholder for arg1 to nextMoves
  argPointer:  .word 0           ; placeholder for arg2 to nextMoves
@@ -303,7 +309,7 @@ chkBrdEpilogue:
 
 
 ; Params: r4 - moves array pointer
-; Return: -1 if failed or Score if success, how to return!???????
+; Return: -1 if failed or Score if success
 checkSol:
         mov r2, -(sp)
         mov r3, -(sp)
@@ -311,10 +317,10 @@ checkSol:
         jsr pc, solveGame
         cmp r2, #'S
         bne chkSolReturnFail
-        mov r3, r0
+        mov r3, 10(sp)
         jmp chkSolEpilogue
 chkSolReturnFail:
-        mov #-1, r0
+        mov #-1, 10(sp)
 chkSolEpilogue:
         mov (sp)+, r4
         mov (sp)+, r3
@@ -503,7 +509,7 @@ atLastPosition:
         rts pc
 
 
-
+.=torg + 5000
 
 nCols:          .word   5
 nRows:          .word   3
