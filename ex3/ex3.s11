@@ -3,26 +3,29 @@
 main:
         mov pc, sp              ; init the stack and all global variables
         tst -(sp)
-        mov #-1, MovesScore
+        mov #-1, MovesScore     ; reset MovesScore & MovesShort
         mov #-1, MovesShort
 
-        jsr pc, checkBoard
-        cmp r4, #0
-        bne mainReturn
+        jsr pc, checkBoard      ; check if Board is valid
+        cmp r4, #0              
+        bne mainReturn          ; exit program if Board is invalid
 
-        mov #MovesShort, -(sp)
+        mov #MovesShort, -(sp)  ; push findShortest args to stack
         mov numMoves, -(sp)
-        jsr pc, findShortest
-        add #4, sp
+        jsr pc, findShortest    ; call findShortest
+        add #4, sp              ; restore stack pointer
 
-        mov #MovesScore, -(sp)
+        mov #MovesScore, -(sp)  ; push findScore args to stack
         mov numMoves, -(sp)
-        jsr pc, findScore
-        add #4, sp
+        jsr pc, findScore       ; call findScore
+        add #4, sp              ; restore stack pointer
 
 mainReturn:
         halt
 
+; Link register: pc
+; Arguments: 2(sp) - max number of moves
+;            4(sp) - address of moves array to put sequence of moves in
 findScore:
         mov r0, -(sp)           ; save non-volatile register r0
         mov r1, -(sp)           ; save non-volatile register r1
@@ -61,43 +64,46 @@ allocateCacheMovesArray:
         rts pc
 
 
-; Params:
-; r1 - source move array
-; r3 - dest move array
+; Link register: pc
+; Arguments: r4 - source move array
+;            r3 - dest move array
 copyMovesArray:
-        mov r0, -(sp)
-        mov r3, -(sp)
-        mov r4, -(sp)
+        mov r0, -(sp)           ; save non-volatile register r0
+        mov r3, -(sp)           ; save non-volatile register r3
+        mov r4, -(sp)           ; save non-volatile register r4
         clr r0
 cpyMovesLoop:
-        movb (r4), r0
-        movb (r4)+, (r3)+
-        cmp r0, #'@
-        bne cpyMovesLoop
-        mov (sp)+, r4
-        mov (sp)+, r3
-        mov (sp)+, r0
+        movb (r4), r0          
+        movb (r4)+, (r3)+       ; move current source move to dest
+        cmp r0, #'@             ; iterate through loop while last move is not last '@
+        bne cpyMovesLoop        
+        mov (sp)+, r4           ; restore non-volatile register r4
+        mov (sp)+, r3           ; restore non-volatile register r3
+        mov (sp)+, r0           ; restore non-volatile register r0
         rts pc
 
 
-; Params:
-; r4 - moves array to add moves to, doesnt changed during runtime
-; r0 - move number to add
+; Link register: pc
+; Arguments: r4 - moves array to add moves to, doesnt changed during runtime
+;            r0 - move number to add
 changeLastMove:
-        mov r4, -(sp)
-        mov r1, -(sp)
+        mov r4, -(sp)           ; save non-volatile register r4
+        mov r1, -(sp)           ; save non-volatile register r1
 chgLstMovLoop:
-        movb (r4)+, r1
+        movb (r4)+, r1          ; iterate until got to last move
         cmp r1, #'@
         bne chgLstMovLoop
-        sub #2, r4
+        sub #2, r4              ; go one move before, and save r0 into it 
         movb r0, (r4)
-        mov (sp)+, r1
-        mov (sp)+, r4
+        mov (sp)+, r1           ; restore non-volatile r0
+        mov (sp)+, r4           ; restore non-volatile r0
         rts pc        
 
-; arg1 - remaining_moves
-; r1 - max_score, r2 - max_score_moves_array, r4 - current_move_array
+; Link register: pc
+; Arguments: 2(sp) - remaining_moves
+;            r1 - max_score
+;            r2 - max_score_moves_array
+;            r4 - current_move_array
 fndScoreRecursion:
         mov r5, -(sp)           ; r5 is non-volatile register for this function, save it's value
         mov 4(sp), r5           ; r5 will contains remaining_moves
@@ -178,7 +184,7 @@ findShortest:
     mov r4, -(sp)
     mov r5, -(sp)
     mov 16(sp), r5              ; r5 holds the max number of moves
-    beq fsEpilogue    ; don't do anything if max num of moves is zero
+    beq fsEpilogue              ; don't do anything if max num of moves is zero
     mov 20(sp), r1              ; r1 holds a pointer to the moves array
     clr r2                      ; r2 hols the length of the current series
     mov r1, r3                  ; r3 holds the end of the of current series
@@ -186,16 +192,16 @@ fsLoopNumMoves:                 ; loop over series lengths
     movb #1, (r3)               ; init the next location in the moves array
     inc r2
     inc r3
-    movb #'@, (r3)               ; mark the end of the current series of moves
+    movb #'@, (r3)              ; mark the end of the current series of moves
  fsLoopMoves:                   ; loop over all moves in the current length
     mov r1, r4                  ; checkSol expects the array address in r4
     tst -(sp)
     jsr pc, checkSol            ; check our series of moves
     mov (sp)+, r0
     cmp r0, #-1
-    bne fsEpilogue    ; If we found a valid move sequence, end
-    mov r1, argSize              ; arg1 for nextMoves in the first word inline
-    mov r2, argPointer               ; arg2 for nextMoves in the second word inline
+    bne fsEpilogue              ; If we found a valid move sequence, end
+    mov r1, argSize             ; arg1 for nextMoves in the first word inline
+    mov r2, argPointer          ; arg2 for nextMoves in the second word inline
     jsr r5, nextMoves           
  argSize:    .word 0            ; placeholder for arg1 to nextMoves
  argPointer:  .word 0           ; placeholder for arg2 to nextMoves
@@ -250,28 +256,31 @@ nmEpilogue:
     mov (sp)+, r0
     rts r5
 
-; Return: r4 - 0 if board valid, 1 if invalid
+
+; Link register: pc
+; Return:   r4 - 0  if board valid, 1 if invalid
 checkBoard:
-        mov r1, -(sp)
-        mov r2, -(sp)
+        mov r1, -(sp)           ; save non-volatile register r1
+        mov r2, -(sp)           ; save non-volatile register r2
         mov #0, r1              ; r1 - currentX
         mov #1, r2              ; r2 - currentY
 chkBrdEmpty:
-        cmp #0, nCols
+        cmp #0, nCols           ; if board is empty return success
         bne chkBrdLoop
         cmp #0, nRows
         beq chkBrdSuccess
-chkBrdLoop:
+chkBrdLoop:                     ; iterate through all board's squares
         cmp r1, nCols
         beq chkBrdLastCol
         inc r1
         jmp chkBrdValidCurrentItem
-chkBrdLastCol:
-        cmp r2, nRows
+chkBrdLastCol:                  ; if current square is at the rightest col, 
+                                ; we reset currentX to 1 and increment currentY
+        cmp r2, nRows           
         bge chkBrdSuccess
         inc r2
         mov #1, r1
-chkBrdValidCurrentItem:
+chkBrdValidCurrentItem:         ; get current board square value
         mov r1, -(sp)
         mov r2, -(sp)
         jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2] values
@@ -285,18 +294,19 @@ chkBrdValidCurrentItem:
         cmp r0, #50
         bgt chkBrdFailure
         jmp chkBrdLoop
-chkBrdLddrToSnake:
+chkBrdLddrToSnake:              ; if it's a ladder, and we are not at the top row, 
+                                ; we check if there is a snake above it
         cmp r2, nRows
         beq chkBrdLoop
         mov r1, -(sp)
         mov r2, -(sp)
-        inc (sp)        ; inc currentY sending to check
+        inc (sp)                ; inc currentY sending to check
         jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2+1] values
         add #4, sp
         cmp r0, #'S
         beq chkBrdFailure
         jmp chkBrdLoop
-chkBrdSnakeAtLastPos:
+chkBrdSnakeAtLastPos:           ; if it's a snake, we check we are not at the final square
         mov r1, -(sp)
         mov r2, -(sp)
         jsr pc, isAtLastPosition
@@ -310,36 +320,35 @@ chkBrdSuccess:
 chkBrdFailure:
         mov #1, r4
 chkBrdEpilogue:
-        mov (sp)+, r2
-        mov (sp)+, r1
+        mov (sp)+, r2           ; restore non-volatile r2
+        mov (sp)+, r1           ; restore non-volatile r1
         rts pc
 
 
-; Params: r4 - moves array pointer
-; Return: -1 if failed or Score if success
+; Link register: pc
+; Arguments:    r4 - address of moves array
+; Return:       2(sp) - -1 if failed or Score if success
 checkSol:
-        mov r2, -(sp)
-        mov r3, -(sp)
-        mov r4, -(sp)
-        jsr pc, solveGame
-        cmp r2, #'S
+        mov r2, -(sp)           ; save non-volatile register r2
+        mov r3, -(sp)           ; save non-volatile register r3
+        mov r4, -(sp)           ; save non-volatile register r4
+        jsr pc, solveGame       ; call solveGame
+        cmp r2, #'S             ; if Output is success
         bne chkSolReturnFail
-        mov r3, 10(sp)
+        mov r3, 10(sp)          ; return score value
         jmp chkSolEpilogue
 chkSolReturnFail:
-        mov #-1, 10(sp)
+        mov #-1, 10(sp)         ; else return -1
 chkSolEpilogue:
-        mov (sp)+, r4
-        mov (sp)+, r3
-        mov (sp)+, r2
+        mov (sp)+, r4           ; restore non-volatile r4
+        mov (sp)+, r3           ; restore non-volatile r3
+        mov (sp)+, r2           ; restore non-volatile r2
         rts pc
 
-; Params: 
-; r4 - pointer to Moves array, doesnt changed during run
-; 
-; Return:
-; r2 - Output
-; r3 - Score
+; Link register: pc
+; Params:       r4 - pointer to Moves array, doesnt changed during run
+; Return:       r2 - Output
+;               r3 - Score
 solveGame:   
         mov r0, -(sp)
         mov r1, -(sp)
@@ -462,6 +471,7 @@ slvGameEpilogue:
         mov (sp)+, r0
         rts pc
 
+; currentX & currentY are only used by solveGame func, so it will be much more readable
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
 ; both values ranges from 1 to nCols/nRows, 
@@ -472,14 +482,15 @@ currentY: .word 1
 
 
 
-
-; fetches into r0 the current board item at [currentX, currentY]
-; currentX & currentY are passed in the stack: currentY 2(sp), currentX 4(sp)
+; Link register: pc
+; Params:       2(sp) - currentY
+                4(sp) - currentX
+; Return:       r0 - Board item at [currentX, currentY]
 getCurrentBoardItem:            
         mov r1, -(sp)
 
         mov nRows, r0     
-        sub 4(sp), r0        ; r0 now holds [nRows - currentY]
+        sub 4(sp), r0           ; r0 now holds [nRows - currentY]
         mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
         add 6(sp), r1        
         dec r1                  ; r1 now holds the board index to the current position
@@ -489,23 +500,23 @@ getCurrentBoardItem:
         rts pc
 
 
-
-; check if the current position is the last positio
-; currentX & currentY are passed in the stack: currentY 2(sp), currentX 4(sp)
-; return 0 if true or 1 else at r0
+; Link register: pc
+; Params:       2(sp) - currentY
+                4(sp) - currentX
+; Return:       r0 - 0 if current is final square or 1 otherwise
 isAtLastPosition:
         mov 2(sp), r0
-        cmp 2(sp), nRows     ; check we finished at top row
+        cmp 2(sp), nRows        ; check if currentY is at top row
         bne notLastPosition
         mov 2(sp), r0
         asr r0
-        bcs mostRightColCheck     ; check if current row is even
-mostLeftColCheck:         ; If we are at even row, 
+        bcs mostRightColCheck   ; check if top row is even
+mostLeftColCheck:               ; If we are at even row, 
                                 ; we finish at the most right square
         cmp 4(sp), #1        
         bne notLastPosition
         jmp atLastPosition
-mostRightColCheck:        ; else - we finish at the most left square
+mostRightColCheck:              ; else - we finish at the most left square
         cmp 4(sp), nCols
         beq atLastPosition
 notLastPosition:
@@ -516,23 +527,3 @@ atLastPosition:
         rts pc
 
 
-
-.=torg + 5000                                   
-
-nCols:          .word   1
-nRows:          .word   6
-numMoves:       .word   5
-
-Board:          .byte    2
-                .byte    2
-                .byte    2
-                .byte    2
-                .byte    2
-                .byte    2
-.even
-
-MovesShort: .blkw 10.
-MovesScore: .blkw 10.
-
-; MovesShort = 5,'@
-; MovesScore = 1,1,1,1,1,'@
