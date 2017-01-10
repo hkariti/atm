@@ -1,0 +1,7 @@
+
+
+.=torg + 12000
+
+rate:	.word 1000
+X:	.word 0
+Y:	.word 0

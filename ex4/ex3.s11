@@ -1,0 +1,535 @@
+. = torg + 1000
+
+main:
+        mov pc, sp              ; init the stack and all global variables
+        tst -(sp)
+        mov #-1, MovesScore     ; reset MovesScore & MovesShort
+        mov #-1, MovesShort
+
+        jsr pc, checkBoard      ; check if Board is valid
+        cmp r4, #0              
+        bne mainReturn          ; exit program if Board is invalid
+
+        mov #MovesShort, -(sp)  ; push findShortest args to stack
+        mov numMoves, -(sp)
+        jsr pc, findShortest    ; call findShortest
+        add #4, sp              ; restore stack pointer
+
+        mov #MovesScore, -(sp)  ; push findScore args to stack
+        mov numMoves, -(sp)
+        jsr pc, findScore       ; call findScore
+        add #4, sp              ; restore stack pointer
+
+mainReturn:
+        halt
+
+
+; Link register: pc
+; Arguments: 2(sp) - max number of moves
+;            4(sp) - address of moves array to put sequence of moves in
+findScore:
+        mov r0, -(sp)           ; save non-volatile register r0
+        mov r1, -(sp)           ; save non-volatile register r1
+        mov r2, -(sp)           ; save non-volatile register r2
+        mov r4, -(sp)           ; save non-volatile register r4
+
+        mov 14(sp), r2          ; r2 now holds pointer to movesScore
+        sub #2, sp              ; allocate memory max_score
+        mov sp, r1              ; r1 holds pointer to max_score
+        clr (r1)                ; reset max_score to 0
+
+        mov 14(sp), r0          ; r0 now holds numMoves
+        mov r0, r4              ; we need to allocate memory for the cached current_moves_array,
+                                ; the memory size will be the same as numMoves however sp must be at even address,
+                                ; so we will round up the size so it will be even number, r4 will contained rounded up numMoves
+        asr r4          
+        bcc allocateCacheMovesArray
+        inc r4                  ; if numMoves is odd, increment it by one
+allocateCacheMovesArray:
+        asl r4
+        sub r4, sp              ; allocate enough room at the stack
+        mov #'@, -(sp)          ; put '@ as first move
+        mov r4, -(sp)           ; store current stack pointer
+        mov sp, r4              
+        add #2, r4              ; r4 now holds pointer to cache_move_array
+        mov r0, -(sp)           ; r0 holds numMoves (remaining_moves at recursion function)
+        jsr pc, fndScoreRecursion
+        add #2, sp              ; deallocate local vars
+        add (sp)+, sp           ; deallocate cache_moves_array
+        add #4, sp              ; deallocate local vars
+
+        mov (sp)+, r4           ; restore non-volatile register r4
+        mov (sp)+, r2           ; restore non-volatile register r2
+        mov (sp)+, r1           ; restore non-volatile register r1
+        mov (sp)+, r0           ; restore non-volatile register r0
+        rts pc
+
+
+; Link register: pc
+; Arguments: r4 - source move array
+;            r3 - dest move array
+copyMovesArray:
+        mov r0, -(sp)           ; save non-volatile register r0
+        mov r3, -(sp)           ; save non-volatile register r3
+        mov r4, -(sp)           ; save non-volatile register r4
+        clr r0
+cpyMovesLoop:
+        movb (r4), r0          
+        movb (r4)+, (r3)+       ; move current source move to dest
+        cmp r0, #'@             ; iterate through loop while last move is not last '@
+        bne cpyMovesLoop        
+        mov (sp)+, r4           ; restore non-volatile register r4
+        mov (sp)+, r3           ; restore non-volatile register r3
+        mov (sp)+, r0           ; restore non-volatile register r0
+        rts pc
+
+
+; Link register: pc
+; Arguments: r4 - moves array to add moves to, doesnt changed during runtime
+;            r0 - move number to add
+changeLastMove:
+        mov r4, -(sp)           ; save non-volatile register r4
+        mov r1, -(sp)           ; save non-volatile register r1
+chgLstMovLoop:
+        movb (r4)+, r1          ; iterate until got to last move
+        cmp r1, #'@
+        bne chgLstMovLoop
+        sub #2, r4              ; go one move before, and save r0 into it 
+        movb r0, (r4)
+        mov (sp)+, r1           ; restore non-volatile r0
+        mov (sp)+, r4           ; restore non-volatile r0
+        rts pc        
+
+
+; Link register: pc
+; Arguments: 2(sp) - remaining_moves
+;            r1 - max_score
+;            r2 - max_score_moves_array
+;            r4 - current_move_array
+fndScoreRecursion:
+        mov r5, -(sp)           ; r5 is non-volatile register for this function, save it's value
+        mov 4(sp), r5           ; r5 will contains remaining_moves
+        mov r3, -(sp)           ; r3 is non-volatile register for this function, save it's value
+        mov r0, -(sp)           ; r0 is non-volatile register for this function, save it's value
+        sub #4, sp              ; allocate memory for local vars
+        mov r1, (sp)            ; (sp) local var contains max_score pointer
+        mov r2, 2(sp)           ; 2(sp) local var contains max_score_moves_array
+
+        cmp r5, #0              ; recursion stop condition - check if remaining_moves is 0
+        blt fndScrEpilogue      ; return from function
+
+        jsr pc, solveGame       ; try to solve game, when finished r3 contains game Score, r2 contains game Output
+        cmp r2, #'S             ; check if solveGame Succeeded
+        beq slvGameSuccess      ; if succeeded, no point at continue more moves since it will pass the end
+        cmp r3, #3              ; if failed not becaused haven't reached the end
+        bne fndScrEpilogue      ; no point at continue more moves since it will always fail
+
+        mov r4, r0              ; r0 now contains current_move_array
+        mov #-1, r3             ; r3 will contain current_moves size, now resets to -1 
+fndScrGetMovesArraySize:        ; this loop finds the current_moves size and save it to r3
+        movb (r0)+, r1          ; r1 contains current move
+        inc r3                  ; increment r3 (holds current_moves size)
+        cmp r1, #'@             ; iterate while current move is not '@
+        bne fndScrGetMovesArraySize
+fndScrExtendMovesArray:         ; fndScrExtendMovesArray extending the current_moves array by one move 
+        movb #'@, (r0)          ; after fndScrGetMovesArraySize finished, r0 points to the end of the current_moves array
+        movb #1, -(r0)          ; move #1 where '@ was previously located
+
+        mov #1, r0              ; fndScrLoop calls fndScoreRecursion 6 times, each time with different last move
+                                ; r0 contains the last_move value
+        dec r5                  ; decrease remaining_moves by 1
+        mov (sp), r1            ; move max_score back to r1
+        mov 2(sp), r2           ; move max_score_moves_array back to r2
+fndScrLoop:
+        cmp r0, #6              ; while last_move <= 6
+        bgt fndScrShortenMovesArray
+        jsr pc, changeLastMove  ; call changeLastMove which will change the last move according to the arg passed at r0
+        mov r5, -(sp)           ; push remaining_moves as arg1 to fndScoreRecursion 
+        jsr pc, fndScoreRecursion       ; call the recursion
+        mov (sp)+, r5           ; pop back remaining_moves
+        inc r0                  ; increase last_move value
+        jmp fndScrLoop
+
+fndScrShortenMovesArray:        ; after we called all the current recursion brances, we need to shorten back by one the current_moves array by 
+        cmp r3, #0              ; check if movesArray's length is zero
+        beq fndScrEpilogue      
+        mov r4, r0              ; move current_move array to r0
+        add r3, r0              ; add current_move_array_size to r0, so it will point to the last move
+        movb #'@, (r0)          ; write '@ instead of the last move
+        jmp fndScrEpilogue      ; jump to function's epilogue
+
+slvGameSuccess:
+        cmp r3, @(sp)           ; check if current score is higher than max_score
+        blt fndScrEpilogue      ; if not - jump to function's epilogue
+        mov r3, @(sp)           ; update max_score value
+        mov 2(sp), r3           ; move max_score array to r3 (destination array arg for copyMovesArray)
+        jsr pc, copyMovesArray  ; copy current_moves_array to max_moves_array
+        jmp fndScrEpilogue
+
+fndScrEpilogue:
+        mov (sp), r1            ; move max_score back to r1
+        mov 2(sp), r2           ; move max_score_moves_array back to r2
+        add #4, sp              ; deallocate local vars
+        mov (sp)+, r0           ; restore non-volatile r0
+        mov (sp)+, r3           ; restore non-volatile r3
+        mov (sp)+, r5           ; restore non-volatile r5
+        rts pc
+
+
+; Link register: pc
+; Arguments: 2(sp) - max number of moves
+;            4(sp) - address of moves array to put sequence of moves in
+findShortest:
+    mov r0, -(sp)
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov r3, -(sp)
+    mov r4, -(sp)
+    mov r5, -(sp)
+    mov 16(sp), r5              ; r5 holds the max number of moves
+    beq fsEpilogue              ; don't do anything if max num of moves is zero
+    mov 20(sp), r1              ; r1 holds a pointer to the moves array
+    clr r2                      ; r2 hols the length of the current series
+    mov r1, r3                  ; r3 holds the end of the of current series
+fsLoopNumMoves:                 ; loop over series lengths
+    movb #1, (r3)               ; init the next location in the moves array
+    inc r2
+    inc r3
+    movb #'@, (r3)              ; mark the end of the current series of moves
+ fsLoopMoves:                   ; loop over all moves in the current length
+    mov r1, r4                  ; checkSol expects the array address in r4
+    tst -(sp)
+    jsr pc, checkSol            ; check our series of moves
+    mov (sp)+, r0
+    cmp r0, #-1
+    bne fsEpilogue              ; If we found a valid move sequence, end
+    mov r1, argSize             ; arg1 for nextMoves in the first word inline
+    mov r2, argPointer          ; arg2 for nextMoves in the second word inline
+    jsr r5, nextMoves           
+ argSize:    .word 0            ; placeholder for arg1 to nextMoves
+ argPointer:  .word 0           ; placeholder for arg2 to nextMoves
+    tst r4
+    beq fsLoopMoves             ; try the next move if we didn't finish the
+                                ; move series for this length
+    sob r5, fsLoopNumMoves      ; try the next series length
+
+fsFailure:
+    mov #-1, (r1)               ; no successful move, put -1 in the moves array
+fsEpilogue:
+    mov (sp)+, r5
+    mov (sp)+, r4
+    mov (sp)+, r3
+    mov (sp)+, r2
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts pc
+    
+
+; Link register: r5
+; Arguments:    (r5) - address of moves array
+;               (r5+2) - size of moves array 
+; Return:   r4 - 1 if moves overflowed (all moves previously were sixes),
+;                0 otherwise
+nextMoves:
+    mov r0, -(sp)
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov r3, -(sp)
+    mov (r5)+, r0               ; r0 contains a pointer to the moves array
+    mov (r5)+, r1               ; r1 contains the length of the moves array
+    beq nmEpilogue              ; don't do anything if the array is empty
+    add r1, r0                  ; go to the end of the array
+nmInc:
+    clr r2                      ; r2:r3 contain the one array element,
+                                ; extended to 32 bit so we could use div
+    movb -(r0), r3              ; fetch current element.
+    inc r3
+    div #7, r2                  ; make sure r3 is 6 and below
+    movb r3, (r0)               ; store value after increment
+    tst r2                      
+    beq nmEpilogue              ; return if the value after increment hasn't
+                                ; reached 7 (i.e. quotient is 0)
+    movb #1, (r0)               ; set element to 1
+    sob r1, nmInc               ; go and increment next digit
+nmEpilogue:
+    mov r2, r4                  ; r4 holds the return value. will be 1 if the
+                                ; last increment overflowed
+    mov (sp)+, r3
+    mov (sp)+, r2
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts r5
+
+
+; Link register: pc
+; Return:   r4 - 0  if board valid, 1 if invalid
+checkBoard:
+        mov r1, -(sp)           ; save non-volatile register r1
+        mov r2, -(sp)           ; save non-volatile register r2
+        mov #0, r1              ; r1 - currentX
+        mov #1, r2              ; r2 - currentY
+chkBrdEmpty:
+        cmp #0, nCols           ; if board is empty return success
+        bne chkBrdLoop
+        cmp #0, nRows
+        beq chkBrdSuccess
+chkBrdLoop:                     ; iterate through all board's squares
+        cmp r1, nCols
+        beq chkBrdLastCol
+        inc r1
+        jmp chkBrdValidCurrentItem
+chkBrdLastCol:                  ; if current square is at the rightest col, 
+                                ; we reset currentX to 1 and increment currentY
+        cmp r2, nRows           
+        bge chkBrdSuccess
+        inc r2
+        mov #1, r1
+chkBrdValidCurrentItem:         ; get current board square value
+        mov r1, -(sp)
+        mov r2, -(sp)
+        jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2] values
+        add #4, sp
+        cmp r0, #'L
+        beq chkBrdLddrToSnake
+        cmp r0, #'S
+        beq chkBrdSnakeAtLastPos
+        cmp r0, #0
+        blt chkBrdFailure
+        cmp r0, #50
+        bgt chkBrdFailure
+        jmp chkBrdLoop
+chkBrdLddrToSnake:              ; if it's a ladder, and we are not at the top row, 
+                                ; we check if there is a snake above it
+        cmp r2, nRows
+        beq chkBrdLoop
+        mov r1, -(sp)
+        mov r2, -(sp)
+        inc (sp)                ; inc currentY sending to check
+        jsr pc, getCurrentBoardItem ; r0 now contains board[r1,r2+1] values
+        add #4, sp
+        cmp r0, #'S
+        beq chkBrdFailure
+        jmp chkBrdLoop
+chkBrdSnakeAtLastPos:           ; if it's a snake, we check we are not at the final square
+        mov r1, -(sp)
+        mov r2, -(sp)
+        jsr pc, isAtLastPosition
+        add #4, sp
+        cmp r0, 0
+        beq chkBrdFailure
+        jmp chkBrdLoop
+chkBrdSuccess:
+        mov #0, r4
+        jmp chkBrdEpilogue
+chkBrdFailure:
+        mov #1, r4
+chkBrdEpilogue:
+        mov (sp)+, r2           ; restore non-volatile r2
+        mov (sp)+, r1           ; restore non-volatile r1
+        rts pc
+
+
+; Link register: pc
+; Arguments:    r4 - address of moves array
+; Return:       2(sp) - -1 if failed or Score if success
+checkSol:
+        mov r2, -(sp)           ; save non-volatile register r2
+        mov r3, -(sp)           ; save non-volatile register r3
+        mov r4, -(sp)           ; save non-volatile register r4
+        jsr pc, solveGame       ; call solveGame
+        cmp r2, #'S             ; if Output is success
+        bne chkSolReturnFail
+        mov r3, 10(sp)          ; return score value
+        jmp chkSolEpilogue
+chkSolReturnFail:
+        mov #-1, 10(sp)         ; else return -1
+chkSolEpilogue:
+        mov (sp)+, r4           ; restore non-volatile r4
+        mov (sp)+, r3           ; restore non-volatile r3
+        mov (sp)+, r2           ; restore non-volatile r2
+        rts pc
+
+
+; Link register: pc
+; Params:       r4 - pointer to Moves array, doesnt changed during run
+; Return:       r2 - Output
+;               r3 - Score
+solveGame:   
+        mov r0, -(sp)
+        mov r1, -(sp)
+        mov r4, -(sp)
+
+
+        mov #1, currentX        ; we start at position [1,1] (see below for 
+                                ; current position explanation)
+        mov #1, currentY        
+        clr r3
+        
+mainLoopStart:                  ; The main loop which iterates through 
+                                ; all Moves and execute them
+        movb (r4)+, r1          ; r1 holds current Move value 
+                                ; (how many steps to forward)
+        cmp r1, #'@             ; if we got to the end of Moves array
+        beq finishedAllMoves    
+
+movePlayer:                     ; a loop which forwards the player 
+                                ; the same amount of steps
+                                ; as pointed in Moves array
+        cmp r1, #0              ; if we finished forwarding the player
+        beq getNextStartingPos
+        dec r1                  ; r1 holds how many steps left to forward, 
+                                ; so it gets decreased by one
+                                ; each time we move it one step 
+        mov currentY, r0
+        asr r0
+        bcs moveRight           ; check if current row is even
+                                ; if it's even we move the player left
+                                ; and if odd we move it to the right
+moveLeft:
+        cmp currentX, #1        ; check if we are at the first column
+        beq moveUp              ; then we need to move it up
+        dec currentX            ; if not - just move it one step to the left
+        jmp movePlayer
+moveRight:
+        cmp currentX, nCols     ; check if we are at the last column
+        beq moveUp              ; then we need to move it up
+        inc currentX            ; if not - just move is one step to the right
+        jmp movePlayer
+moveUp:
+        cmp currentY, nRows     ; check if we are already at the last row
+        beq errorPastLimit      ; if so - we exceeded the finish position 
+                                ; and raise error
+        inc currentY            ; if not - just move it step upwords
+        jmp movePlayer
+errorPastLimit:                 ; raise error - we already passed the finish line
+        mov #'F, r2         
+        mov #2, r3
+        jmp slvGameEpilogue
+getNextStartingPosition:        ; check where the player is at 
+                                ; and act accordingly
+
+        mov currentX, -(sp)
+        mov currentY, -(sp)
+        jsr pc, getCurrentBoardItem
+        add #4, sp
+checkCurrentBoardItem:
+        cmp r0, #'L             ; if the player is on a ladder
+        beq onLadder            
+        cmp r0, #'S             ; if the player is on a snake
+        bne doneMove
+onSnake:
+        cmp currentY, #1        ; check if the player is on the first row
+        beq errorSnakeAtBottom  ; if so - we cannot go further down, 
+                                ; raise exception
+        dec currentY            ; if not - decrease current row value
+        br getNextStartingPosition      ; check again where the player 
+                                        ; is at and act accordingly
+onLadder:
+        cmp currentY, nRows     ; check if the player is on the last row
+        beq errorLadderAtTop    ; if so - we cannot go further up, raise exception
+        inc currentY            ; if not - increase current row value
+        br getNextStartingPosition      ; check again where the player is at 
+                                        ; and act accordingly
+errorSnakeAtBottom:             ; raise error - player got a snake on first row
+        mov #'F, r2
+        mov #0, r3
+        jmp slvGameEpilogue
+errorLadderAtTop:               ; raise error - player got a ladder on top floor
+        mov #'F, r2 
+        mov #1, r3
+        jmp slvGameEpilogue
+
+doneMove:                       ; the player finished executing the move, 
+                                ; and now he is at a numbered square 
+                                ; (not ladder nor snake).
+                                ; r0 holds the current square value
+        add r0, r3              ; add the current number to score
+        jmp mainLoopStart       ; fetch another move and execute it!
+
+
+finishedAllMoves:               ; we got here when the player finished 
+                                ; executing all moves
+                                ; check if the current position is 
+                                ; the last position, if not - the player didn't 
+                                ; accomplish the game ): raise exception
+        mov currentX, -(sp)
+        mov currentY, -(sp)
+        jsr pc, isAtLastPosition
+        add #4, sp
+        cmp r0, 0
+        bne errorFinishedAtWrongPlace
+        
+finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! 
+                                ; return success!
+        mov #'S, r2
+        jmp slvGameEpilogue
+
+errorFinishedAtWrongPlace:      ; raise error - the player didn't finish 
+                                ; at the last square
+        mov #'F, r2
+        mov #3, r3
+        jmp slvGameEpilogue
+
+slvGameEpilogue:
+        mov (sp)+, r4
+        mov (sp)+, r1
+        mov (sp)+, r0
+        rts pc
+
+; currentX & currentY are only used by solveGame func, so it will be much more readable
+; currentX and currentY are used to describe the current player position.
+; currentX describe the current Column, and currentY current Row
+; both values ranges from 1 to nCols/nRows, 
+; while the first position the player begins
+; at is [1,1] and the last ending position is [nCols, nRows]
+currentX: .word 0
+currentY: .word 1
+
+
+
+; Link register: pc
+; Params:       2(sp) - currentY
+;               4(sp) - currentX
+; Return:       r0 - Board item at [currentX, currentY]
+getCurrentBoardItem:            
+        mov r1, -(sp)
+
+        mov nRows, r0     
+        sub 4(sp), r0           ; r0 now holds [nRows - currentY]
+        mul nCols, r0           ; r1 now holds the the board index to the beginning of the current row
+        add 6(sp), r1        
+        dec r1                  ; r1 now holds the board index to the current position
+        movb Board(r1), r0      ; r0 now holds the board value at r1 index
+
+        mov (sp)+, r1
+        rts pc
+
+
+; Link register: pc
+; Params:       2(sp) - currentY
+;               4(sp) - currentX
+; Return:       r0 - 0 if current is final square or 1 otherwise
+isAtLastPosition:
+        mov 2(sp), r0
+        cmp 2(sp), nRows        ; check if currentY is at top row
+        bne notLastPosition
+        mov 2(sp), r0
+        asr r0
+        bcs mostRightColCheck   ; check if top row is even
+mostLeftColCheck:               ; If we are at even row, 
+                                ; we finish at the most right square
+        cmp 4(sp), #1        
+        bne notLastPosition
+        jmp atLastPosition
+mostRightColCheck:              ; else - we finish at the most left square
+        cmp 4(sp), nCols
+        beq atLastPosition
+notLastPosition:
+        mov #1, r0
+        rts pc
+atLastPosition:
+        mov #0, r0
+        rts pc
+
+
+
