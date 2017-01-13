@@ -1,0 +1,110 @@
+; Link register: pc
+; Arguments: r2 - Character to print
+putc:
+    tstb @#tps          ; Wait until printer is ready
+    bpl putc
+    movb r2, @#tpb      ; send char to the printer
+    rts pc
+
+; Link register: pc
+; Arguments: 2(sp) - Pointer to null-terminated string
+puts:
+    mov r0, -(sp)       ; save registers
+    mov r2, -(sp)
+    mov 6(sp), r0
+psLoop:                 ; print a character at a time
+    movb (r0), r2       ; Fetch character to print
+    beq psEpilogue      ; test if string has ended
+    jsr pc, putc        ; Print
+    inc r0              ; increase r0 to get the next char
+    br psLoop           ; loop
+psEpilogue:             ; string has ended
+    mov (sp)+, r2       ; restore registers
+    mov (sp)+, r0
+    rts pc
+
+; Link register: pc
+; Arguments: 2(pc) - number to print
+numPrint:
+    mov r0, -(sp)       ; save registers
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov r3, -(sp)
+    mov 12(sp), r0      ; fetch argument
+    clr r3              ; r3 holds the number of digits
+nmpDiv:                 ; Break the number to digits and push them to stack
+                        ; pushing to stack reverses order, needed for printing
+    mov r0, r1          ; r1 holds the digit
+    clr r0              ; r0 will hold the digit after division
+    div #10, r0         ; divide by 10 to separate the digits
+    mov r1, -(sp)       ; push to stack
+    inc r3              ; bump digit count
+    tst r0
+    bne nmpDiv          ; move on to the next digit if there are left
+nmpPrint:               ; print the digits from the stack
+    mov (sp)+, r2       ; r2 holds the digit to print
+    add #60, r2         ; convert to ascii code
+    jsr pc, putc        ; print
+    sob r3, nmpPrint    ; loop to next digit. r3 holds the digit count
+npmEpilogue:
+    mov (sp)+, r3       ; restore registers
+    mov (sp)+, r2
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts pc
+     
+; Link register: pc
+; Uses shared spaces: Board, nRows, nCols, currentX, currentY
+printBoard:
+    mov r0, -(sp)       ; save registers
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov #1, r0          ; init X coordinate to leftest column
+    mov nRows, r1       ; init current row to top row
+pLoop:
+    cmp r0, currentX    ; Test if we reached the current location (x then y)
+    bne pLBoardItem
+    cmp r1, currentY
+    bne pLBoardItem
+    mov #'*, r2         ; Print * for current location
+    jsr pc, boardItemPrint
+    br pLNextBlock
+pLBoardItem:            ; not current location, print the board item
+    mov r0, -(sp)       ; Get current board item. Will be returned in r0
+    mov r1, -(sp)
+    jsr pc, getCurrentBoardItem
+    mov r0, r2          ; r2 holds the board item to print
+    tst (sp)+
+    mov (sp)+, r0       ; restore r0
+    jsr pc, boardItemPrint
+pLNextBlock:            ; Print a seperator before the next block and
+                        ; move cursor
+    cmp r0, nCols       ; Check if we reached the end of the row
+    beq pLEndRow
+    inc r0              ; Row didnt end, increase X coordinate
+    mov #' , r2         ; Print a space after the current item
+    jsr pc, putc
+    br pLoop            ; Loop for the next board item
+pLEndRow:
+    mov #newline, -(sp)  ; Print a new line after the current item
+    jsr pc, puts
+    tst (sp)+
+    mov #1, r0          ; Reset X coordinate
+    sob r1, pLoop       ; Move to the next row, quit if we reached the end
+pEpilogue:
+    mov (sp)+, r2       ; Restore registers
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts pc 
+newline: .byte '\n, '\r, 0, 0
+
+; Link register: pc
+; Arguments: r2 - Board item
+boardItemPrint:
+    cmp r2, #max_value  ; See if board item needs converting to ascii
+    bgt pBAfterAscii    ; S, L block or *, just print
+    add #60, r2         ; Convert to ascii. We assume single-digits values
+pBAfterAscii:           ; Print a board item after ascii conversion
+    jsr pc, putc
+    rts pc
+
