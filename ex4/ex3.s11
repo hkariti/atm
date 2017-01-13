@@ -59,30 +59,14 @@ chgLstMovLoop:
         rts pc        
 
 ; Link register: pc
-; Params:       r4 - pointer to Moves array, doesnt changed during run
-; Return:       r2 - Output
-;               r3 - Score
-solveGame:   
-        mov r0, -(sp)
+; Params:       r1 - Move
+; Return:       r2 - Target slot value if move was legal, -1 if illegal
+movePlayer:
+        mov r0, -(sp)           ; save registers
         mov r1, -(sp)
-        mov r4, -(sp)
-
-
-        mov #1, currentX        ; we start at position [1,1] (see below for 
-                                ; current position explanation)
-        mov #1, currentY        
-        clr r3
-        
-mainLoopStart:                  ; The main loop which iterates through 
-                                ; all Moves and execute them
-        movb (r4)+, r1          ; r1 holds current Move value 
-                                ; (how many steps to forward)
-        cmp r1, #'@             ; if we got to the end of Moves array
-        beq finishedAllMoves    
-
-movePlayer:                     ; a loop which forwards the player 
+MPLoop:                         ; a loop which forwards the player 
                                 ; the same amount of steps
-                                ; as pointed in Moves array
+                                ; as the move dictates
         cmp r1, #0              ; if we finished forwarding the player
         beq getNextStartingPos
         dec r1                  ; r1 holds how many steps left to forward, 
@@ -97,22 +81,18 @@ moveLeft:
         cmp currentX, #1        ; check if we are at the first column
         beq moveUp              ; then we need to move it up
         dec currentX            ; if not - just move it one step to the left
-        jmp movePlayer
+        jmp MPLoop
 moveRight:
         cmp currentX, nCols     ; check if we are at the last column
         beq moveUp              ; then we need to move it up
         inc currentX            ; if not - just move is one step to the right
-        jmp movePlayer
+        jmp MPLoop
 moveUp:
         cmp currentY, nRows     ; check if we are already at the last row
-        beq errorPastLimit      ; if so - we exceeded the finish position 
+        beq MPError             ; if so - we exceeded the finish position 
                                 ; and raise error
         inc currentY            ; if not - just move it step upwords
-        jmp movePlayer
-errorPastLimit:                 ; raise error - we already passed the finish line
-        mov #'F, r2         
-        mov #2, r3
-        jmp slvGameEpilogue
+        jmp MPLoop
 getNextStartingPosition:        ; check where the player is at 
                                 ; and act accordingly
 
@@ -127,64 +107,31 @@ checkCurrentBoardItem:
         bne doneMove
 onSnake:
         cmp currentY, #1        ; check if the player is on the first row
-        beq errorSnakeAtBottom  ; if so - we cannot go further down, 
+        beq MPError             ; if so - we cannot go further down, 
                                 ; raise exception
         dec currentY            ; if not - decrease current row value
         br getNextStartingPosition      ; check again where the player 
                                         ; is at and act accordingly
 onLadder:
         cmp currentY, nRows     ; check if the player is on the last row
-        beq errorLadderAtTop    ; if so - we cannot go further up, raise exception
+        beq MPError             ; if so - we cannot go further up, raise exception
         inc currentY            ; if not - increase current row value
         br getNextStartingPosition      ; check again where the player is at 
                                         ; and act accordingly
-errorSnakeAtBottom:             ; raise error - player got a snake on first row
-        mov #'F, r2
-        mov #0, r3
-        jmp slvGameEpilogue
-errorLadderAtTop:               ; raise error - player got a ladder on top floor
-        mov #'F, r2 
-        mov #1, r3
-        jmp slvGameEpilogue
-
 doneMove:                       ; the player finished executing the move, 
                                 ; and now he is at a numbered square 
                                 ; (not ladder nor snake).
                                 ; r0 holds the current square value
-        add r0, r3              ; add the current number to score
-        jmp mainLoopStart       ; fetch another move and execute it!
-
-
-finishedAllMoves:               ; we got here when the player finished 
-                                ; executing all moves
-                                ; check if the current position is 
-                                ; the last position, if not - the player didn't 
-                                ; accomplish the game ): raise exception
-        mov currentX, -(sp)
-        mov currentY, -(sp)
-        jsr pc, isAtLastPosition
-        add #4, sp
-        cmp r0, 0
-        bne errorFinishedAtWrongPlace
-        
-finishSuccess:                  ; the player ACCOMPLISHED THE GAME (: !! 
-                                ; return success!
-        mov #'S, r2
-        jmp slvGameEpilogue
-
-errorFinishedAtWrongPlace:      ; raise error - the player didn't finish 
-                                ; at the last square
-        mov #'F, r2
-        mov #3, r3
-        jmp slvGameEpilogue
-
-slvGameEpilogue:
-        mov (sp)+, r4
-        mov (sp)+, r1
+        mov r0, r2              ; Return the current value
+        jmp MPEpilogue
+MPError:
+        mov #-1, r2
+MPEpilogue:
         mov (sp)+, r0
+        mov (sp)+, r1
         rts pc
 
-; currentX & currentY are only used by solveGame func, so it will be much more readable
+; currentX & currentY are only used by movePlayer func, so it will be much more readable
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
 ; both values ranges from 1 to nCols/nRows, 
@@ -211,7 +158,6 @@ getCurrentBoardItem:
 
         mov (sp)+, r1
         rts pc
-
 
 ; Link register: pc
 ; Params:       2(sp) - currentY
