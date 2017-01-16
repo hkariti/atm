@@ -212,17 +212,17 @@ pBAfterAscii:           ; Print a board item after ascii conversion
 ; Arguments: X,Y at shared space
 Fibo:
         mov r0, -(sp)
-        cmp X, #1000
+        cmp Y, #1000
         beq FiboReset
         mov X, r0
         mov Y, X
-        add Y, r0
-        mov (sp)+, r0
+        add r0, Y
         jmp FiboEpilogue
 FiboReset:
         mov #1, X
         mov #1, Y
 FiboEpilogue:
+        mov (sp)+, r0
         rts pc
 
 
