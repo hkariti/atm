@@ -1,27 +1,233 @@
+tks = 177560
+tkb = 177562
+tps = 177564
+tpb = 177566
+lcs = 177546
+lcs = 177546
+max_value = 7
+
 . = torg + 1000
 
 main:
         mov pc, sp              ; init the stack and all global variables
         tst -(sp)
-        mov #-1, MovesScore     ; reset MovesScore & MovesShort
-        mov #-1, MovesShort
 
-        jsr pc, checkBoard      ; check if Board is valid
-        cmp r4, #0              
-        bne mainReturn          ; exit program if Board is invalid
+        mov #clock, @#100       ; clock interrupt vector initialization
+        mov #300, @#102
 
-        mov #MovesShort, -(sp)  ; push findShortest args to stack
-        mov numMoves, -(sp)
-        jsr pc, findShortest    ; call findShortest
-        add #4, sp              ; restore stack pointer
-
-        mov #MovesScore, -(sp)  ; push findScore args to stack
-        mov numMoves, -(sp)
-        jsr pc, findScore       ; call findScore
-        add #4, sp              ; restore stack pointer
+        mov #1, isGameStarted
+        mov #10, secondsLeft
+        clr clockTicks
+        mov #Board, -(sp)
+        jsr pc, scanf
 
 mainReturn:
         halt
+
+
+; Clock Interrupt Callback, Called whenever cpu ticks & clock interrupt is enabled
+clock:
+        inc clockTicks          ; Increment counter of clock ticks
+        cmp clockTicks, rate    ; if counter passed a time of a second
+        blt clkEpilogue         
+        clr clockTicks          ; reset counter of clock ticks
+        dec secondsLeft         ; reduce the seconds left stopper
+        bne clkEpilogue         ; when the seconds left reaches 0, stop the clock
+        clr @#lcs
+clkEpilogue:
+        rti
+
+
+; Link Register: pc
+; Arguments:    2(sp) - pointer to destination array
+;                times_up - at shared space
+; Return:       Null terminated string will be written to destination buffer
+;                Turn on times_up flag if time is over
+scanf:
+        mov r2, -(sp)           ; save registers
+        mov r3, -(sp)
+        mov r4, -(sp)
+        mov 10(sp), r4          ; r4 contains pointer to current char dest buffer 
+        mov #0, r3              ; r3 contains counter for chars read so far
+        mov #1, @#tks           ; enable keyboard read
+        cmp isGameStarted, #0   ; check if game is started
+        beq  getCharLoop        ; If so - Enable timer
+        mov #100, @#lcs         
+getCharLoop:                    ; Main read loop which ends only when 
+                                ; user press enter or if time is over
+        cmp secondsLeft, #0        ; Check if time is over
+        beq scfTimePassed               
+        tstb @#tks              ; Check if keyboard is ready
+        bpl getCharLoop         ; if not branch to loop again
+
+        movb @#tkb, (r4)        ; Move character read to destination buffer
+        mov #1, @#tks           ; enable keyboard read
+
+        movb (r4), r2           ; Move char read to r2
+        cmp r2, #13.            ; check if user pressed enter
+        beq scfEpilogue         ; if so - finish scanf
+        cmp r2, #8.             ; check if char is backspace
+        beq scfBackspace        
+        jsr pc, putc            ; if char is not enter nor backspace - print it!
+        inc r4                  ; move buffer pointer to next char
+        inc r3                  ; inc num of chars read so far
+        jmp getCharLoop
+scfBackspace:
+        cmp r3, #0              ; check if backspace was read as first char
+        beq getCharLoop         ; if so do nothing
+        jsr pc, putc            ; write backspace to move cursor left
+        mov #32., r2            ; write space to override last written char
+        jsr pc, putc
+        mov #8., r2             ; write backspace to move cursor left
+        jsr pc, putc
+        sub #1, r3              ; move buffer pointer one slot backwards
+        sub #1, r4              ; dec num of chars being read so far
+        jmp getCharLoop
+scfTimePassed:
+        mov #1, times_up
+scfEpilogue:
+        clr @#lcs               ; Disable Timer
+
+        movb #0, (r4)           ; add null-terminating char to buffer end
+        mov (sp)+, r4
+        mov (sp)+, r3
+        mov (sp)+, r2
+        rts pc
+
+
+; Link register: pc
+; Arguments: r2 - Character to print
+putc:
+    tstb @#tps          ; Wait until printer is ready
+    bpl putc
+    movb r2, @#tpb      ; send char to the printer
+    rts pc
+
+; Link register: pc
+; Arguments: 2(sp) - Pointer to null-terminated string
+puts:
+    mov r0, -(sp)       ; save registers
+    mov r2, -(sp)
+    mov 6(sp), r0
+psLoop:                 ; print a character at a time
+    movb (r0), r2       ; Fetch character to print
+    beq psEpilogue      ; test if string has ended
+    jsr pc, putc        ; Print
+    inc r0              ; increase r0 to get the next char
+    br psLoop           ; loop
+psEpilogue:             ; string has ended
+    mov (sp)+, r2       ; restore registers
+    mov (sp)+, r0
+    rts pc
+
+; Link register: pc
+; Arguments: 2(pc) - number to print
+numPrint:
+    mov r0, -(sp)       ; save registers
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov r3, -(sp)
+    mov 12(sp), r0      ; fetch argument
+    clr r3              ; r3 holds the number of digits
+nmpDiv:                 ; Break the number to digits and push them to stack
+                        ; pushing to stack reverses order, needed for printing
+    mov r0, r1          ; r1 holds the digit
+    clr r0              ; r0 will hold the digit after division
+    div #10, r0         ; divide by 10 to separate the digits
+    mov r1, -(sp)       ; push to stack
+    inc r3              ; bump digit count
+    tst r0
+    bne nmpDiv          ; move on to the next digit if there are left
+nmpPrint:               ; print the digits from the stack
+    mov (sp)+, r2       ; r2 holds the digit to print
+    add #60, r2         ; convert to ascii code
+    jsr pc, putc        ; print
+    sob r3, nmpPrint    ; loop to next digit. r3 holds the digit count
+npmEpilogue:
+    mov (sp)+, r3       ; restore registers
+    mov (sp)+, r2
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts pc
+     
+; Link register: pc
+; Uses shared spaces: Board, nRows, nCols, currentX, currentY
+printBoard:
+    mov r0, -(sp)       ; save registers
+    mov r1, -(sp)
+    mov r2, -(sp)
+    mov #1, r0          ; init X coordinate to leftest column
+    mov nRows, r1       ; init current row to top row
+pLoop:
+    cmp r0, currentX    ; Test if we reached the current location (x then y)
+    bne pLBoardItem
+    cmp r1, currentY
+    bne pLBoardItem
+    mov #'*, r2         ; Print * for current location
+    jsr pc, boardItemPrint
+    br pLNextBlock
+pLBoardItem:            ; not current location, print the board item
+    mov r0, -(sp)       ; Get current board item. Will be returned in r0
+    mov r1, -(sp)
+    jsr pc, getCurrentBoardItem
+    mov r0, r2          ; r2 holds the board item to print
+    tst (sp)+
+    mov (sp)+, r0       ; restore r0
+    jsr pc, boardItemPrint
+pLNextBlock:            ; Print a seperator before the next block and
+                        ; move cursor
+    cmp r0, nCols       ; Check if we reached the end of the row
+    beq pLEndRow
+    inc r0              ; Row didnt end, increase X coordinate
+    mov #' , r2         ; Print a space after the current item
+    jsr pc, putc
+    br pLoop            ; Loop for the next board item
+pLEndRow:
+    mov #newline, -(sp)  ; Print a new line after the current item
+    jsr pc, puts
+    tst (sp)+
+    mov #1, r0          ; Reset X coordinate
+    sob r1, pLoop       ; Move to the next row, quit if we reached the end
+pEpilogue:
+    mov (sp)+, r2       ; Restore registers
+    mov (sp)+, r1
+    mov (sp)+, r0
+    rts pc 
+newline: .byte '\n, '\r, 0, 0
+
+; Link register: pc
+; Arguments: r2 - Board item
+boardItemPrint:
+    cmp r2, #max_value  ; See if board item needs converting to ascii
+    bgt pBAfterAscii    ; S, L block or *, just print
+    add #60, r2         ; Convert to ascii. We assume single-digits values
+pBAfterAscii:           ; Print a board item after ascii conversion
+    jsr pc, putc
+    rts pc
+
+
+
+
+; Link Register: pc
+; Arguments: X,Y at shared space
+Fibo:
+        mov r0, -(sp)
+        cmp X, #1000
+        beq FiboReset
+        mov X, r0
+        mov Y, X
+        add Y, r0
+        mov (sp)+, r0
+        jmp FiboEpilogue
+FiboReset:
+        mov #1, X
+        mov #1, Y
+FiboEpilogue:
+        rts pc
+
+
+
+
 
 ; Link register: pc
 ; Arguments: r4 - source move array
@@ -131,6 +337,7 @@ MPEpilogue:
         mov (sp)+, r1
         rts pc
 
+.even
 ; currentX & currentY are only used by movePlayer func, so it will be much more readable
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
@@ -139,7 +346,6 @@ MPEpilogue:
 ; at is [1,1] and the last ending position is [nCols, nRows]
 currentX: .word 0
 currentY: .word 1
-
 
 
 ; Link register: pc
@@ -185,5 +391,20 @@ atLastPosition:
         mov #0, r0
         rts pc
 
+.even
+Board: .blkw 60
+nRows: .blkw 4
+nCols: .blkw 4
+times_up: .word 0
+secondsLeft: .blkw 10
+clockTicks: .blkw 10
+isGameStarted: .word 0
+
+
+.=torg + 12000
+
+rate:   .word 100
+X:      .word 0
+Y:      .word 0
 
 
