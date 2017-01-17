@@ -11,15 +11,55 @@ max_value = 7
 main:
         mov pc, sp              ; init the stack and all global variables
         tst -(sp)
+        clr clockTicks
+
+        dec #5, sp              ; init buffer for input numbers
+
+        mov sp, r0              ; r0 points to input buffer
+        mov #pNRows, -(sp)      ; prompt for number of rows
+        jsr pc, puts
+        mov r0, -(sp)           ; scan number of rows
+        jsr pc, scanf
+        jsr pc, atoi            ; convert to int
+        mov (r0), nRows         ; Store in variable
+        add #4, sp
+
+        mov #pNCols, -(sp)      ; prompt for number of rows
+        jsr pc, puts
+        mov r0, -(sp)           ; scan number of cols
+        jsr pc, scanf
+        jsr pc, atoi            ; convert to int
+        mov (r0), nCols         ; Store in variable
+        add #4, sp
+        
+        mov #pBoard, -(sp)      ; prompt for the board
+        jsr pc, puts
+        mov #Board, -(sp)       ; read the board from the user
+        jsr pc, scanf
+        add #4, sp
+        
+        mov #pDuration, -(sp)   ; prompt for the game duration
+        jsr pc, puts
+        mov r0, -(sp)           ; scan game duration
+        jsr pc, scanf
+        jsr pc, atoi            ; convert to int
+        mov (r0), secondsLeft   ; put duration in right place
+        add #4, sp
+
+        mov #mReady, -(sp)      ; print ready message
+        jsr pc, puts
+        mov secondsLeft, -(sp)
+        jsr pc, numPrint
+        mov #pReady, -(sp)
+        jsr pc, puts
+        add #6, sp
+
+        jsr pc, waitForEnter
 
         mov #clock, @#100       ; clock interrupt vector initialization
         mov #300, @#102
 
         mov #1, isGameStarted
-        mov #10, secondsLeft
-        clr clockTicks
-        mov #Board, -(sp)
-        jsr pc, scanf
 
 mainReturn:
         halt
@@ -38,6 +78,46 @@ clkEpilogue:
         rti
 
 
+; Link Register: pc
+waitForEnter:
+        mov r0, -(sp)           ; save registers
+        mov #1, @#tks           ; enable keyboard read
+wFELoop:
+        tstb @#tks              ; Check if keyboard is ready
+        bpl wFELoop             ; if not branch to loop again
+        mov @#tkb, r0           ; read character
+        cmp r0, #13.            ; check for enter
+        beq wFEEpilogue
+        mov #1, @#tks           ; enable keyboard read
+        br wFELoop
+wFEEpilogue:
+        mov (sp)+, r0           ; restore registers
+        rts pc
+        
+        
+; Link Register: pc
+; Arguments:    2(sp) - pointer to a string of numbers. Will stop on the first
+                        non-octal-digit character.
+; Return:       2(sp) will contain a word of the converted string, or 0 if no
+                conversion could be made
+atoi:
+        mov r0, -(sp)
+        mov r1, -(sp)
+        clr r0
+atoiLoop:
+        movb 6(sp)+, r1         ; Fetch character to convert
+        dec #60, r1             ; Convert to digit
+        cmp r1, #7              ; Check value is a digit
+        bhi atoiEpilogue
+        asl r0, 3               ; Add another digit in the converted number
+        add r1, r0              ; Add the recently scanned digit
+        br atoiLoop
+atoiEpilogue:
+        mov r0, 6(sp)
+        mov (sp)+, r1
+        mov (sp)+, r0
+        rts pc
+         
 ; Link Register: pc
 ; Arguments:    2(sp) - pointer to destination array
 ;                times_up - at shared space
@@ -397,6 +477,23 @@ times_up: .word 0
 secondsLeft: .blkw 10
 clockTicks: .blkw 10
 isGameStarted: .word 0
+
+; Messages strings
+pNRows: .ascii<\r\nPlease enter the number of rows:\r\n> 0
+pNCols: .ascii<\r\nPlease enter the number of columns:\r\n> 0
+pBoard: .ascii<\r\nPlease enter the board:\r\n> 0
+pDuration: .ascii<\r\nPlease enter game duration in seconds:\r\n> 0
+mReady: .ascii<\r\nWe are all set. Total time: > 0
+pReady: .ascii< sec\r\nPress Enter key when you are ready...\r\n> 0
+mCurBoard: .ascii<Current Board:\r\n> 0
+mCurScore: .ascii<The current score is: > 0
+mRemTime: .ascii<\r\nThe remaining time is: > 0
+mLuckyNum: .ascii<\r\n\r\nSelect your lucky number: > 0
+mDice: .ascii<\r\nThe dice shows: > 0
+mScore: .ascii<The final score is: > 0
+mFinalSlot: .ascii<You have reached the final slot, the game ends successfully!\r\n> 0
+mFailure: .ascii<Illegal move, the game ended in failuare!!!\r\n> 0
+mTimeUp: .ascii<\r\nTime's up, the game ends successfully!\r\n> 0
 
 .=torg + 12000
 
