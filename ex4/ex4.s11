@@ -337,16 +337,6 @@ MPEpilogue:
         mov (sp)+, r1
         rts pc
 
-.even
-; currentX & currentY are only used by movePlayer func, so it will be much more readable
-; currentX and currentY are used to describe the current player position.
-; currentX describe the current Column, and currentY current Row
-; both values ranges from 1 to nCols/nRows, 
-; while the first position the player begins
-; at is [1,1] and the last ending position is [nCols, nRows]
-currentX: .word 0
-currentY: .word 1
-
 
 ; Link register: pc
 ; Params:       2(sp) - currentY
@@ -392,6 +382,14 @@ atLastPosition:
         rts pc
 
 .even
+; currentX and currentY are used to describe the current player position.
+; currentX describe the current Column, and currentY current Row
+; both values ranges from 1 to nCols/nRows, 
+; while the first position the player begins
+; at is [1,1] and the last ending position is [nCols, nRows]
+currentX: .word 0
+currentY: .word 1
+
 Board: .blkw 60
 nRows: .blkw 4
 nCols: .blkw 4
@@ -399,7 +397,6 @@ times_up: .word 0
 secondsLeft: .blkw 10
 clockTicks: .blkw 10
 isGameStarted: .word 0
-
 
 .=torg + 12000
 
