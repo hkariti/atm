@@ -4,9 +4,10 @@ tps = 177564
 tpb = 177566
 lcs = 177546
 lcs = 177546
-max_value = 7
 
 . = torg + 1000
+
+;;; MAIN ;;;
 
 main:
         mov pc, sp              ; init the stack
@@ -16,7 +17,7 @@ main:
         mov #getc, @#60         ; keyboard interrupt vector init
         mov #300, @#62
 
-        mov #inputBuffer, r0     ; r0 points to input buffer
+        mov #inputBuffer, r0    ; r0 points to input buffer
         mov #pNRows, -(sp)      ; prompt for number of rows
         jsr pc, puts
         mov r0, -(sp)           ; scan number of rows
@@ -55,7 +56,7 @@ main:
         jsr pc, puts
         add #6, sp
 
-        jsr pc, waitForEnter
+        jsr pc, waitForEnter    ; prompt to user to begin
         
         jsr pc, printBoard
         jsr pc, promptMove      ; prompt for the first move
@@ -63,14 +64,16 @@ main:
         mov #101, @#tks
 fiboRun:                        ; generate fibonacci numbers as random seed
         jsr pc, Fibo
-        tst gameEnded
+        tst gameState
         beq fiboRun
 mainReturn:
         jsr pc, printEndGame
         halt
 
 
-; Clock Interrupt Callback, Called whenever cpu ticks & clock interrupt is enabled
+;;; INTERRUPT HANDLERS ;;;
+
+; Clock Interrupt Callback, called whenever cpu ticks & clock interrupt is enabled
 clock:
         inc clockTicks          ; Increment counter of clock ticks
         cmp clockTicks, rate    ; if counter passed a time of a second
@@ -78,12 +81,52 @@ clock:
         clr clockTicks          ; reset counter of clock ticks
         dec secondsLeft         ; reduce the seconds left stopper
         bne clkEpilogue         ; when the seconds left reaches 0:
-        mov #1, gameEnded       ; set game status to 1 (time's up)
+        mov #1, gameState       ; set game status to 1 (time's up)
         clr @#lcs               ; stop the clock
         clr @#tks               ; stop the keyboard
 clkEpilogue:
         rti
 
+; Keyboard interrupt handler. Called on every keyboard press.
+; Builds an input line char-by-char and calls the handler function on enter.
+getc:
+        mov r2, -(sp)           ; save registers
+        mov r3, -(sp)
+
+        mov inputOffset, r3     ; r3 holds the current offset in buffer
+        movb @#tkb, r2          ; Put read char in r2
+        cmp r2, #13.            ; check if user pressed enter
+        beq getcEnter
+        cmp r2, #8.             ; check if user pressed backspace
+        bne getcNormal
+        jsr pc, handleBackspace
+        jmp getcEpilogue
+getcNormal:
+        jsr pc, putc            ; print char
+        movb r2, inputBuffer(r3); put read char in the buffer
+        inc r3                  ; increase the buffer offset
+        jmp getcEpilogue
+getcEpilogue:                   ; Normal epilogue (no need to call handler)
+        mov r3, inputOffset     ; store offset for next run
+        mov (sp)+, r2           ; restore registers
+        mov (sp)+, r3
+        inc @#tks               ; enable keyboard read
+        rti
+getcEnter:                      ; Line has ended
+        clr @#lcs               ; disable timer
+        movb #0, inputBuffer(r3); terminate input string
+        jsr pc, handleMove      ; process the input
+        tst gameState           ; Test if game has ended
+        bne getcEEnd            ; if game is still on:
+        clr inputOffset         ; reset input offset for next line
+        mov #100, @#lcs         ; re-enable timer
+        inc @#tks               ; enable keyboard read
+getcEEnd:
+        mov (sp)+, r2           ; restore registers
+        mov (sp)+, r3
+        rti
+
+;;; SYNC IO ;;;
 
 ; Link Register: pc
 waitForEnter:
@@ -101,33 +144,6 @@ wFEEpilogue:
         mov (sp)+, r0           ; restore registers
         rts pc
         
-        
-; Link Register: pc
-; Arguments:    2(sp) - pointer to a string of numbers. Will stop on the first
-;                       non-octal-digit character.
-; Return:       2(sp) will contain a word of the converted string, or 0 if no
-;               conversion could be made
-atoi:
-        mov r0, -(sp)
-        mov r1, -(sp)
-        mov r2, -(sp)
-        mov 10(sp), r2          ; r2 points to the given string
-        clr r0
-atoiLoop:
-        movb (r2)+, r1          ; Fetch character to convert
-        sub #60, r1             ; Convert to digit
-        cmp r1, #7              ; Check value is a digit
-        bhi atoiEpilogue
-        ash #3, r0              ; Add another digit in the converted number
-        add r1, r0              ; Add the recently scanned digit
-        br atoiLoop
-atoiEpilogue:
-        mov r0, 10(sp)          ; store return value
-        mov (sp)+, r2           ; restore registers
-        mov (sp)+, r1
-        mov (sp)+, r0
-        rts pc
-         
 ; Link Register: pc
 ; Arguments:    2(sp) - a pre allocated buffer to put input line in
 ; Return:       Null terminated string will be written to destination buffer
@@ -167,45 +183,6 @@ scfEpilogue:
         mov (sp)+, r2
         rts pc
 
-; Keyboard interrupt handler
-getc:
-        mov r2, -(sp)           ; save registers
-        mov r3, -(sp)
-
-        mov inputOffset, r3     ; r3 holds the current offset in buffer
-        movb @#tkb, r2          ; Put read char in r2
-        cmp r2, #13.            ; check if user pressed enter
-        beq getcEnter
-        cmp r2, #8.             ; check if user pressed backspace
-        bne getcNormal
-        jsr pc, handleBackspace
-        jmp getcEpilogue
-getcNormal:
-        jsr pc, putc            ; print char
-        movb r2, inputBuffer(r3); put read char in the buffer
-        inc r3                  ; increase the buffer offset
-        jmp getcEpilogue
-getcEpilogue:
-        mov r3, inputOffset     ; store offset for next run
-        mov (sp)+, r2           ; restore registers
-        mov (sp)+, r3
-        inc @#tks               ; enable keyboard read
-        rti
-getcEnter:
-        clr @#lcs               ; disable timer
-        movb #0, inputBuffer(r3); terminate input string
-        jsr pc, handleMove      ; process the input
-        tst gameEnded           ; Test if game has ended
-        bne getcEEnd
-        clr inputOffset         ; reset input offset for next line
-        mov #100, @#lcs         ; re-enable timer
-        inc @#tks               ; enable keyboard read
-getcEEnd:
-        mov (sp)+, r2           ; restore registers
-        mov (sp)+, r3
-        rti
-    
-
 ; Link register - pc
 ; Arguments - r3 - number of chars read
 handleBackspace:
@@ -222,7 +199,7 @@ handleBackspace:
 hBEpilogue:
         mov (sp)+, r2           ; restore r2
         rts pc
-
+        
 ; Link register: pc
 ; Arguments: r2 - Character to print
 putc:
@@ -247,6 +224,34 @@ psEpilogue:             ; string has ended
     mov (sp)+, r2       ; restore registers
     mov (sp)+, r0
     rts pc
+
+;;; STRING AND CHARACTER MANIPULATION ;;;
+
+; Link Register: pc
+; Arguments:    2(sp) - pointer to a string of numbers. Will stop on the first
+;                       non-octal-digit character.
+; Return:       2(sp) will contain a word of the converted string, or 0 if no
+;               conversion could be made
+atoi:
+        mov r0, -(sp)
+        mov r1, -(sp)
+        mov r2, -(sp)
+        mov 10(sp), r2          ; r2 points to the given string
+        clr r0
+atoiLoop:
+        movb (r2)+, r1          ; Fetch character to convert
+        sub #60, r1             ; Convert to digit
+        cmp r1, #7              ; Check value is a digit
+        bhi atoiEpilogue
+        ash #3, r0              ; Add another digit in the converted number
+        add r1, r0              ; Add the recently scanned digit
+        br atoiLoop
+atoiEpilogue:
+        mov r0, 10(sp)          ; store return value
+        mov (sp)+, r2           ; restore registers
+        mov (sp)+, r1
+        mov (sp)+, r0
+        rts pc
 
 ; Link register: pc
 ; Arguments: 2(pc) - number to print
@@ -278,6 +283,8 @@ npmEpilogue:
     mov (sp)+, r0
     rts pc
      
+;;; GAME UI FUNCTIONS ;;;
+
 ; Link register: pc
 ; Uses shared spaces: Board, nRows, nCols, currentX, currentY
 printBoard:
@@ -329,40 +336,6 @@ pEpilogue:
 newline: .byte '\n, '\r, 0, 0
 
 ; Link register: pc
-; Arguments: r2 - Board item
-boardItemPrint:
-    cmp r2, #max_value  ; See if board item needs converting to ascii
-    bgt pBAfterAscii    ; S, L block or *, just print
-    add #60, r2         ; Convert to ascii. We assume single-digits values
-pBAfterAscii:           ; Print a board item after ascii conversion
-    jsr pc, putc
-    rts pc
-
-
-
-
-; Link Register: pc
-; Arguments: X,Y at shared space
-Fibo:
-        mov r0, -(sp)
-        cmp Y, #1000
-        bge FiboReset
-        mov X, r0
-        mov Y, X
-        add r0, Y
-        jmp FiboEpilogue
-FiboReset:
-        mov #1, X
-        mov #1, Y
-FiboEpilogue:
-        mov (sp)+, r0
-        rts pc
-
-
-
-
-
-; Link register: pc
 promptMove:
     mov #mCurScore, -(sp)    ; print current score
     jsr pc, puts
@@ -406,11 +379,11 @@ handleMove:
     beq hndlWin
     jsr pc, promptMove      ; normal move, prompt for next move then
     br hMEpilogue
-hndlWin:                  ; the player won!
-    mov #3, gameEnded       ; mark game status as 3 (player won)
+hndlWin:                    ; the player won!
+    mov #3, gameState       ; mark game status as 3 (player won)
     br hMEpilogue
-hndlBadMove:              ; the player did an illegal move
-    mov #2, gameEnded       ; mark game status as 2 (player lost)
+hndlBadMove:                ; the player did an illegal move
+    mov #2, gameState       ; mark game status as 2 (player lost)
 hMEpilogue:
     mov (sp)+, r1           ; restore registers
     mov (sp)+, r2
@@ -418,13 +391,13 @@ hMEpilogue:
 
 ; Link register: pc    
 printEndGame:
-    cmp gameEnded, #1       ; check for time's up
+    cmp gameState, #1       ; check for time's up
     bne winOrLose
     mov #mTimeUp, -(sp)
     jsr pc, puts
     br pFinalScore
 winOrLose:
-    cmp gameEnded, #2       ; check if player lost
+    cmp gameState, #2       ; check if player lost
     bne playerWon
     mov #mFailure, -(sp)
     jsr pc, puts
@@ -440,6 +413,8 @@ pFinalScore:
 prEpilogue:
     tst (sp)+
     rts pc
+
+;;; GAME LOGIC ;;;
 
 ; Link register: pc
 ; Params:       r1 - Move
@@ -558,21 +533,49 @@ getCurrentBoardItem:
         mov (sp)+, r1
         rts pc
 
-.even
+;;; AUXILLARY ;;;
+
+; Link Register: pc
+; Arguments: X,Y at shared space
+Fibo:
+        mov r0, -(sp)
+        cmp Y, #1000
+        bge FiboReset
+        mov X, r0
+        mov Y, X
+        add r0, Y
+        jmp FiboEpilogue
+FiboReset:
+        mov #1, X
+        mov #1, Y
+FiboEpilogue:
+        mov (sp)+, r0
+        rts pc
+
+;;; GLOBAL VARIABLES ;;;
+
+; Game state
+
 ; currentX and currentY are used to describe the current player position.
 ; currentX describe the current Column, and currentY current Row
 ; both values ranges from 1 to nCols/nRows, 
 ; while the first position the player begins
 ; at is [1,1] and the last ending position is [nCols, nRows]
+.even
 currentX: .word 1
 currentY: .word 1
 
+Score: .blkw 1
+secondsLeft: .blkw 10
+; 0 - game in progress; 1 - time's up; 2 - invalid move; 3 - player won
+gameState: .word 0
+
+; Game settings
 Board: .blkw 60
 nRows: .blkw 4
 nCols: .blkw 4
-Score: .blkw 1
-gameEnded: .word 0
-secondsLeft: .blkw 10
+
+; Program aux state
 clockTicks: .blkw 10
 inputBuffer: .blkw 60
 inputOffset: .word 0
