@@ -13,9 +13,7 @@ main:
         tst -(sp)
         inc secondsLeft         ; set secondsLeft to non-zero so scanf will work
 
-        sub #6, sp              ; init buffer for input numbers
-
-        mov sp, r0              ; r0 points to input buffer
+        mov inputBuffer, r0     ; r0 points to input buffer
         mov #pNRows, -(sp)      ; prompt for number of rows
         jsr pc, puts
         mov r0, -(sp)           ; scan number of rows
@@ -121,61 +119,60 @@ atoiEpilogue:
         rts pc
          
 ; Link Register: pc
-; Arguments:    2(sp) - pointer to destination array
-;                times_up - at shared space
+; Arguments:    2(sp) - a pre allocated buffer to put input line in
 ; Return:       Null terminated string will be written to destination buffer
-;                Turn on times_up flag if time is over
 scanf:
         mov r2, -(sp)           ; save registers
         mov r3, -(sp)
         mov r4, -(sp)
-        mov 10(sp), r4          ; r4 contains pointer to current char dest buffer 
+        mov 10(sp), r4          ; r4 points to the input buffer
         mov #0, r3              ; r3 contains counter for chars read so far
         mov #1, @#tks           ; enable keyboard read
-        cmp isGameStarted, #0   ; check if game is started
-        beq  getCharLoop        ; If so - Enable timer
-        mov #100, @#lcs         
 getCharLoop:                    ; Main read loop which ends only when 
                                 ; user press enter or if time is over
-        cmp secondsLeft, #0        ; Check if time is over
-        beq scfTimePassed               
         tstb @#tks              ; Check if keyboard is ready
         bpl getCharLoop         ; if not branch to loop again
 
-        movb @#tkb, (r4)        ; Move character read to destination buffer
+        movb @#tkb, r2          ; Put read char in r2
         mov #1, @#tks           ; enable keyboard read
 
-        movb (r4), r2           ; Move char read to r2
         cmp r2, #13.            ; check if user pressed enter
         beq scfEpilogue         ; if so - finish scanf
         cmp r2, #8.             ; check if char is backspace
-        beq scfBackspace        
+        beq scfBackspace
         jsr pc, putc            ; if char is not enter nor backspace - print it!
-        inc r4                  ; move buffer pointer to next char
-        inc r3                  ; inc num of chars read so far
+        movb r2, (r4)           ; Move char read to input buffer
+        inc r3                  ; inc char counter
+        inc r4                  ; inc buffer pointer
         jmp getCharLoop
 scfBackspace:
-        cmp r3, #0              ; check if backspace was read as first char
-        beq getCharLoop         ; if so do nothing
-        jsr pc, putc            ; write backspace to move cursor left
-        mov #32., r2            ; write space to override last written char
-        jsr pc, putc
-        mov #8., r2             ; write backspace to move cursor left
-        jsr pc, putc
-        sub #1, r3              ; move buffer pointer one slot backwards
-        sub #1, r4              ; dec num of chars being read so far
+        mov 10(sp), r4          ; reset r4 pointer
+        jsr pc, handleBackspace
+        add r3, r4              ; use new r3 as the correct offset into buffer
         jmp getCharLoop
-scfTimePassed:
-        mov #1, times_up
 scfEpilogue:
-        clr @#lcs               ; Disable Timer
-
         movb #0, (r4)           ; add null-terminating char to buffer end
         mov (sp)+, r4
         mov (sp)+, r3
         mov (sp)+, r2
         rts pc
 
+; Link register - pc
+; Arguments - r3 - number of chars read
+handleBackspace:
+        mov r2, -(sp)           ; save r2
+
+        cmp r3, #0              ; check if backspace was read as first char
+        beq hBEpilogue          ; if so do nothing
+        jsr pc, putc            ; write backspace to move cursor left
+        mov #32., r2            ; write space to override last written char
+        jsr pc, putc
+        mov #8., r2             ; write backspace to move cursor left
+        jsr pc, putc
+        dec r3                  ; move buffer pointer one slot backwards
+hBEpilogue:
+        mov (sp)+, r2           ; restore r2
+        rts pc
 
 ; Link register: pc
 ; Arguments: r2 - Character to print
@@ -479,6 +476,8 @@ times_up: .word 0
 secondsLeft: .blkw 10
 clockTicks: .blkw 10
 isGameStarted: .word 0
+inputBuffer: .blkw 5
+inputOffset: .word 0
 
 ; Messages strings
 .even
