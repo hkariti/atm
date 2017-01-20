@@ -58,8 +58,8 @@ main:
 
         jsr pc, waitForEnter    ; prompt to user to begin
         
-        jsr pc, printBoard
-        jsr pc, promptMove      ; prompt for the first move
+        mov #1, r1              ; set implied move to eval the first board slot
+        jsr pc, handleMove      ; handle implied move and prompt for the next
         mov #100, @#lcs         ; enable interrupts
         mov #101, @#tks
 fiboRun:                        ; generate fibonacci numbers as random seed
@@ -115,7 +115,7 @@ getcEpilogue:                   ; Normal epilogue (no need to call handler)
 getcEnter:                      ; Line has ended
         clr @#lcs               ; disable timer
         movb #0, inputBuffer(r3); terminate input string
-        jsr pc, handleMove      ; process the input
+        jsr pc, parseMove       ; process the input
         tst gameState           ; Test if game has ended
         bne getcEEnd            ; if game is still on:
         clr inputOffset         ; reset input offset for next line
@@ -352,7 +352,8 @@ promptMove:
     rts pc
 
 ; Link register: pc
-handleMove:
+; Arguments: inputBuffer, in shared space.
+parseMove:
     mov r0, -(sp)           ; save registers
     mov r1, -(sp)
 
@@ -368,7 +369,17 @@ handleMove:
     mov r1, (sp)
     jsr pc, numPrint
     tst (sp)+
+    jsr pc, handleMove      ; now do the actual move
 
+    mov (sp)+, r1           ; restore registers
+    mov (sp)+, r0
+    rts pc
+
+; Link register: pc
+; Arguments: r1 - Dice roll
+; Return: updates gameState in shared space
+handleMove:
+    mov r2, -(sp)           ; save registers
     jsr pc, movePlayer      ; move the player according to dice roll
     jsr pc, printBoard
     tst r2                  ; check move was legal (-1 if not)
@@ -385,8 +396,7 @@ hndlWin:                    ; the player won!
 hndlBadMove:                ; the player did an illegal move
     mov #2, gameState       ; mark game status as 2 (player lost)
 hMEpilogue:
-    mov (sp)+, r1           ; restore registers
-    mov (sp)+, r2
+    mov (sp)+, r2           ; restore registers
     rts pc
 
 ; Link register: pc    
@@ -562,7 +572,7 @@ FiboEpilogue:
 ; while the first position the player begins
 ; at is [1,1] and the last ending position is [nCols, nRows]
 .even
-currentX: .word 1
+currentX: .word 0
 currentY: .word 1
 
 Score: .blkw 1
