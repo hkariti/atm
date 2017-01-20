@@ -295,7 +295,8 @@ pLoop:
     cmp r1, currentY
     bne pLBoardItem
     mov #'*, r2         ; Print * for current location
-    jsr pc, boardItemPrint
+    jsr pc, putc
+    ;jsr pc, boardItemPrint
     br pLNextBlock
 pLBoardItem:            ; not current location, print the board item
     mov r0, -(sp)       ; Get current board item. Will be returned in r0
@@ -304,7 +305,8 @@ pLBoardItem:            ; not current location, print the board item
     mov r0, r2          ; r2 holds the board item to print
     tst (sp)+
     mov (sp)+, r0       ; restore r0
-    jsr pc, boardItemPrint
+    jsr pc, putc
+    ;jsr pc, boardItemPrint
 pLNextBlock:            ; Print a seperator before the next block and
                         ; move cursor
     cmp r0, nCols       ; Check if we reached the end of the row
@@ -344,7 +346,7 @@ pBAfterAscii:           ; Print a board item after ascii conversion
 Fibo:
         mov r0, -(sp)
         cmp Y, #1000
-        beq FiboReset
+        bge FiboReset
         mov X, r0
         mov Y, X
         add r0, Y
@@ -387,7 +389,7 @@ handleMove:
     mov Y, r1               ; prepare last fibo result for dice roll
     clr r0
     div (sp), r0            ; get dice roll via (fibo rum)mod(input) 
-    inc r0                  ; dice can't be zero
+    inc r1                  ; dice can't be zero
     mov #mDice, (sp)         ; print dice result
     jsr pc, puts
     mov r1, (sp)
@@ -503,9 +505,12 @@ doneMove:                       ; the player finished executing the move,
                                 ; and now he is at a numbered square 
                                 ; (not ladder nor snake).
                                 ; r0 holds the current square value
+        sub #60, r0             ; convert to int
         mov r0, r2              ; Return the current value
         jmp MPEpilogue
 MPError:
+        clr currentX            ; zero coordinates so they won't appear on board
+        clr currentY 
         mov #-1, r2
 MPEpilogue:
         mov (sp)+, r0
@@ -569,7 +574,7 @@ Score: .blkw 1
 gameEnded: .word 0
 secondsLeft: .blkw 10
 clockTicks: .blkw 10
-inputBuffer: .blkw 5
+inputBuffer: .blkw 60
 inputOffset: .word 0
 
 ; Messages strings
@@ -607,7 +612,7 @@ mTimeUp: .ascii<\r\nTime's up, the game ends successfully!\r\n\0>
 .=torg + 12000
 
 rate:   .word 100
-X:      .word 0
-Y:      .word 0
+X:      .word 1
+Y:      .word 1
 
 
