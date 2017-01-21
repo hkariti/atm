@@ -21,7 +21,7 @@ main:
         mov #pNRows, -(sp)      ; prompt for number of rows
         jsr pc, puts
         mov r0, -(sp)           ; scan number of rows
-        jsr pc, scanf
+        jsr pc, gets
         jsr pc, atoi            ; convert to int
         mov (sp), nRows         ; Store in variable
         add #4, sp
@@ -29,7 +29,7 @@ main:
         mov #pNCols, -(sp)      ; prompt for number of rows
         jsr pc, puts
         mov r0, -(sp)           ; scan number of cols
-        jsr pc, scanf
+        jsr pc, gets
         jsr pc, atoi            ; convert to int
         mov (sp), nCols         ; Store in variable
         add #4, sp
@@ -37,13 +37,13 @@ main:
         mov #pBoard, -(sp)      ; prompt for the board
         jsr pc, puts
         mov #Board, -(sp)       ; read the board from the user
-        jsr pc, scanf
+        jsr pc, gets
         add #4, sp
         
         mov #pDuration, -(sp)   ; prompt for the game duration
         jsr pc, puts
         mov r0, -(sp)           ; scan game duration
-        jsr pc, scanf
+        jsr pc, gets
         jsr pc, atoi            ; convert to int
         mov (sp), secondsLeft   ; put duration in right place
         add #4, sp
@@ -147,7 +147,7 @@ wFEEpilogue:
 ; Link Register: pc
 ; Arguments:    2(sp) - a pre allocated buffer to put input line in
 ; Return:       Null terminated string will be written to destination buffer
-scanf:
+gets:
         mov r2, -(sp)           ; save registers
         mov r3, -(sp)
         mov r4, -(sp)
@@ -163,20 +163,20 @@ getCharLoop:                    ; Main read loop which ends only when
         mov #1, @#tks           ; enable keyboard read
 
         cmp r2, #13.            ; check if user pressed enter
-        beq scfEpilogue         ; if so - finish scanf
+        beq gtsEpilogue         ; if so - finish gets
         cmp r2, #8.             ; check if char is backspace
-        beq scfBackspace
+        beq gtsBackspace
         jsr pc, putc            ; if char is not enter nor backspace - print it!
         movb r2, (r4)           ; Move char read to input buffer
         inc r3                  ; inc char counter
         inc r4                  ; inc buffer pointer
         jmp getCharLoop
-scfBackspace:
+gtsBackspace:
         mov 10(sp), r4          ; reset r4 pointer
         jsr pc, handleBackspace
         add r3, r4              ; use new r3 as the correct offset into buffer
         jmp getCharLoop
-scfEpilogue:
+gtsEpilogue:
         movb #0, (r4)           ; add null-terminating char to buffer end
         mov (sp)+, r4
         mov (sp)+, r3
@@ -185,6 +185,7 @@ scfEpilogue:
 
 ; Link register - pc
 ; Arguments - r3 - number of chars read
+; Returns - r3 - new number of chars read, after deletion from BS
 handleBackspace:
         mov r2, -(sp)           ; save r2
 
