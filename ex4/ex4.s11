@@ -622,7 +622,7 @@ mScore: .ascii<The final score is: \0>
 .even
 mFinalSlot: .ascii<You have reached the final slot, the game ends successfully!\r\n\0>
 .even
-mFailure: .ascii<\r\nIllegal move, the game ended in failuare!!!\r\n\0>
+mFailure: .ascii<\r\nIllegal move, the game ended in failure!!!\r\n\0>
 .even
 mTimeUp: .ascii<\r\nTime's up, the game ends successfully!\r\n\0>
 
