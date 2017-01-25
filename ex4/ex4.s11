@@ -17,6 +17,9 @@ main:
         mov #getc, @#60         ; keyboard interrupt vector init
         mov #300, @#62
 
+        mov #1, X 				; Initialize Fibo X, Y
+        mov #1, Y 				
+        
         mov #inputBuffer, r0    ; r0 points to input buffer
         mov #pNRows, -(sp)      ; prompt for number of rows
         jsr pc, puts
